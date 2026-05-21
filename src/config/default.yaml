@@ -1,0 +1,78 @@
+data:
+  root: "A股数据"
+  start_date: "2019-01-01"
+  train_end_date: "2025-12-31"
+  valid_start_date: "2026-01-01"
+  valid_end_date: "2026-05-20"
+  universe_mode: "hs300"
+  official_universe_exclude_st: true
+  official_universe_exclude_bse: true
+
+label:
+  main: "label_1d"
+  horizons: [1, 3, 5]
+
+features:
+  lookback_windows: [5, 10, 20]
+  use_price: true
+  use_metric: true
+  use_moneyflow: true
+  use_news_tfidf: true
+  news_tfidf_max_features: 128
+  news_cutoff_time: null
+
+preprocess:
+  winsorize: true
+  winsorize_method: "train_quantile"
+  lower_quantile: 0.01
+  upper_quantile: 0.99
+  impute_method: "train_median"
+  scale_method: "train_standard"
+
+dataset:
+  type: "window"
+  lookback: 20
+  min_history_days: 20
+
+model:
+  name: "transformer_encoder"
+  task: "regression"
+  input_dim: null
+  hidden_dim: 128
+  dropout: 0.1
+  num_layers: 2
+  num_heads: 4
+
+training:
+  seed: 42
+  batch_size: 1024
+  epochs: 50
+  learning_rate: 0.001
+  loss: "mse"
+  early_stopping_patience: 5
+  device: "auto"
+
+backtest:
+  initial_cash: 1000000
+  execution_price: "open"
+  commission_rate: 0.0003
+  stamp_tax_rate: 0.001
+  slippage_rate: 0.0005
+  min_lot_size: 100
+  enforce_t_plus_one: true
+  block_limit_up_buy: true
+  block_limit_down_sell: true
+  target_full_invested: true
+
+strategy:
+  name: "score_weighted_risk_control"
+  benchmark_strategy: "topk_equal_weight"
+  top_k: 20
+  max_single_weight: 0.10
+  max_industry_weight: 0.30
+  max_turnover: null
+  min_amount: 0
+
+outputs:
+  root: "outputs"
+

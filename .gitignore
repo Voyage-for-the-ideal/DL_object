@@ -1,0 +1,10 @@
+A股数据/
+outputs/
+*.pt
+*.pth
+*.ckpt
+*.joblib
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
