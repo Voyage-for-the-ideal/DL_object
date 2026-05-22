@@ -1,10 +1,46 @@
+# Raw data and generated experiment outputs
 A股数据/
 outputs/
+
+# Model weights and serialized artifacts
 *.pt
 *.pth
 *.ckpt
 *.joblib
+*.pkl
+*.pickle
+*.onnx
+
+# Python bytecode and test/type/lint caches
 __pycache__/
+*.py[cod]
+*$py.class
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments and local environment files
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Local logs and temporary files
+*.log
+.tmp_pytest/
+tmp/
+temp/
+*.tmp
+
+# Notebook and IDE/editor noise
+.ipynb_checkpoints/
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
