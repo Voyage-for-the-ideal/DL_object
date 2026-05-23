@@ -17,7 +17,7 @@ def find_project_root(start: Path | None = None) -> Path:
     if current.is_file():
         current = current.parent
     for parent in (current, *current.parents):
-        if (parent / "AGENTS.md").exists() or (parent / "大作业.md").exists():
+        if (parent / "CLAUDE.md").exists() or (parent / "大作业.md").exists():
             return parent
     return current
 

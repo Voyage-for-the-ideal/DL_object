@@ -35,6 +35,30 @@ def test_window_dataset_ends_at_signal_date_without_future() -> None:
     assert dataset.index.iloc[0]["trade_date"] == "20200102"
 
 
+def test_window_dataset_filters_endpoint_dates_and_keeps_history() -> None:
+    train = _panel().iloc[:2]
+    valid = _panel().iloc[2:]
+    history = pd.concat([train, valid], ignore_index=True)
+    dataset = WindowDataset.from_frame(history, lookback=3, end_dates=valid["trade_date"])
+    assert dataset.X.shape == (2, 3, 1)
+    assert dataset.index["trade_date"].tolist() == ["20200103", "20200104"]
+    assert dataset.X[0, :, 0].tolist() == [1.0, 2.0, 3.0]
+
+
+def test_window_dataset_groups_each_stock_separately() -> None:
+    panel = pd.concat(
+        [
+            _panel().assign(ts_code="A"),
+            _panel().assign(ts_code="B", feature=[10.0, 20.0, 30.0, 40.0]),
+        ],
+        ignore_index=True,
+    )
+    dataset = WindowDataset.from_frame(panel, lookback=4, end_dates=["20200104"])
+    assert dataset.X.shape == (2, 4, 1)
+    assert dataset.index["ts_code"].tolist() == ["A", "B"]
+    assert dataset.X[1, :, 0].tolist() == [10.0, 20.0, 30.0, 40.0]
+
+
 def test_time_split_is_date_based() -> None:
     train, valid = split_by_date(
         _panel(), TimeSplit("20200101", "20200102", "20200103", "20200104")

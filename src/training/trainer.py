@@ -11,10 +11,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from src.data.schema import TRADE_DATE
 from src.datasets.tabular_dataset import TabularDataset
+from src.datasets.window_dataset import WindowDataset
 from src.evaluation.metrics import evaluate_predictions
 from src.features.preprocess import TrainOnlyPreprocessor
-from src.models.base import BaseAlphaModel
+from src.models.base import BaseAlphaModel, format_predictions
 from src.models.factory import create_model
 from src.models.linear import create_linear_model
 from src.training.callbacks import EarlyStopping
@@ -24,6 +26,11 @@ from src.utils.seed import set_global_seed
 
 def _mse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float(np.mean((y_true - y_pred) ** 2))
+
+
+def _base_model_params(model_config: dict[str, Any]) -> dict[str, Any]:
+    ignored = {"name", "input_dim", "task", "ridge", "elasticnet", "gbdt", "lookback"}
+    return {key: value for key, value in model_config.items() if key not in ignored}
 
 
 def train_tabular_model(
@@ -36,29 +43,65 @@ def train_tabular_model(
     """Fit a configured tabular model and write standard artifacts."""
     target = ensure_dir(run_dir)
     set_global_seed(int(config.get("training", {}).get("seed", 42)))
-    train_ds = TabularDataset.from_frame(train_frame, label_column=label_column)
-    preprocessor = TrainOnlyPreprocessor().fit(train_frame, train_ds.feature_columns)
+    feature_seed_ds = TabularDataset.from_frame(train_frame, label_column=label_column)
+    feature_columns = feature_seed_ds.feature_columns
+    preprocessor = TrainOnlyPreprocessor().fit(train_frame, feature_columns)
     train_transformed = preprocessor.transform(train_frame)
     valid_transformed = preprocessor.transform(valid_frame)
-    train_ds = TabularDataset.from_frame(
-        train_transformed,
-        feature_columns=train_ds.feature_columns,
-        label_column=label_column,
-    )
-    valid_ds = TabularDataset.from_frame(
-        valid_transformed,
-        feature_columns=train_ds.feature_columns,
-        label_column=label_column,
-    )
 
     model_config = config.get("model", {})
     training_config = config.get("training", {})
     model_name = str(model_config.get("name", "ridge"))
-    if model_name in {"ridge", "elasticnet"}:
-        model: BaseAlphaModel = create_linear_model(model_name)
+    lookback = int(config.get("dataset", {}).get("lookback", 20))
+    if model_name == "transformer_encoder":
+        train_ds = WindowDataset.from_frame(
+            train_transformed,
+            lookback=lookback,
+            feature_columns=feature_columns,
+            label_column=label_column,
+        )
+        valid_history = pd.concat([train_transformed, valid_transformed], ignore_index=True)
+        valid_end_dates = valid_transformed[TRADE_DATE].astype(str).unique()
+        valid_ds = WindowDataset.from_frame(
+            valid_history,
+            lookback=lookback,
+            feature_columns=feature_columns,
+            label_column=label_column,
+            end_dates=valid_end_dates,
+        )
+        if len(train_ds) == 0:
+            raise ValueError(
+                f"No training windows were created with lookback={lookback}; "
+                "extend the training date range or reduce dataset.lookback."
+            )
+        if len(valid_ds) == 0:
+            raise ValueError(
+                f"No validation windows were created with lookback={lookback}; "
+                "provide enough train/validation history or reduce dataset.lookback."
+            )
     else:
-        model = create_model(model_name, input_dim=len(train_ds.feature_columns), **model_config)
-    if model_name == "mlp" and hasattr(model, "model"):
+        train_ds = TabularDataset.from_frame(
+            train_transformed,
+            feature_columns=feature_columns,
+            label_column=label_column,
+        )
+        valid_ds = TabularDataset.from_frame(
+            valid_transformed,
+            feature_columns=feature_columns,
+            label_column=label_column,
+        )
+    if model_name in {"ridge", "elasticnet"}:
+        params = dict(model_config.get(model_name, {}))
+        model: BaseAlphaModel = create_linear_model(model_name, **params)
+    elif model_name in {"gbdt", "lightgbm"}:
+        params = dict(model_config.get("gbdt", {}))
+        model = create_model(model_name, input_dim=len(feature_columns), **params)
+    else:
+        params = _base_model_params(model_config)
+        if model_name == "transformer_encoder":
+            params["lookback"] = lookback
+        model = create_model(model_name, input_dim=len(feature_columns), **params)
+    if model_name in {"mlp", "transformer_encoder"} and hasattr(model, "model"):
         log = _fit_torch_tabular_with_log(model, train_ds, valid_ds, training_config)
     else:
         model.fit(train_ds.X, train_ds.y, **training_config)
@@ -95,10 +138,14 @@ def train_tabular_model(
         if model_name in {"ridge", "elasticnet", "gbdt", "lightgbm"}
         else target / "model.pt"
     )
-    (target / "model_summary.txt").write_text(
-        f"model_name={model.model_name}\nfeatures={len(train_ds.feature_columns)}\n",
-        encoding="utf-8",
-    )
+    summary = f"model_name={model.model_name}\nfeatures={len(feature_columns)}\n"
+    if model_name == "transformer_encoder":
+        summary += (
+            f"lookback={lookback}\n"
+            f"train_windows={len(train_ds)}\n"
+            f"valid_windows={len(valid_ds)}\n"
+        )
+    (target / "model_summary.txt").write_text(summary, encoding="utf-8")
     plt.figure()
     plt.plot(log["epoch"], log["train_loss"], label="train")
     plt.plot(log["epoch"], log["valid_loss"], label="valid")
@@ -111,8 +158,8 @@ def train_tabular_model(
 
 def _fit_torch_tabular_with_log(
     model: BaseAlphaModel,
-    train_ds: TabularDataset,
-    valid_ds: TabularDataset,
+    train_ds: TabularDataset | WindowDataset,
+    valid_ds: TabularDataset | WindowDataset,
     training_config: dict[str, Any],
 ) -> pd.DataFrame:
     import torch
@@ -133,8 +180,14 @@ def _fit_torch_tabular_with_log(
         batch_size=batch_size,
         shuffle=True,
     )
-    valid_x = torch.as_tensor(valid_ds.X, dtype=torch.float32, device=device)
-    valid_y = torch.as_tensor(valid_ds.y, dtype=torch.float32, device=device)
+    valid_loader = torch.utils.data.DataLoader(
+        torch.utils.data.TensorDataset(
+            torch.as_tensor(valid_ds.X, dtype=torch.float32),
+            torch.as_tensor(valid_ds.y, dtype=torch.float32),
+        ),
+        batch_size=batch_size,
+        shuffle=False,
+    )
     stopper = EarlyStopping(patience=patience)
     best_state: dict[str, Any] | None = None
     rows: list[dict[str, float | int]] = []
@@ -150,25 +203,45 @@ def _fit_torch_tabular_with_log(
             optimizer.step()
             train_losses.append(float(loss.detach().cpu()))
         torch_model.eval()
+        valid_scores_list: list[torch.Tensor] = []
         with torch.no_grad():
-            valid_scores = torch_model(valid_x)
-            valid_loss = float(criterion(valid_scores, valid_y).detach().cpu())
-        pred = model.predict(valid_ds.X, valid_ds.index)
+            for xb, _yb in valid_loader:
+                xb = xb.to(device)
+                _yb = _yb.to(device)
+                valid_scores_list.append(torch_model(xb))
+        valid_scores_gpu = torch.cat(valid_scores_list, dim=0)
+        valid_y = torch.as_tensor(valid_ds.y, dtype=torch.float32, device=device)
+        valid_loss = float(criterion(valid_scores_gpu, valid_y).detach().cpu())
+        pred = format_predictions(valid_ds.index, valid_scores_gpu.detach().cpu().numpy(), model.model_name)
         pred["label"] = valid_ds.y
         metrics, _, _ = evaluate_predictions(pred)
-        rows.append(
-            {
-                "epoch": epoch,
-                "train_loss": float(np.mean(train_losses)) if train_losses else float("nan"),
-                "valid_loss": valid_loss,
-                "valid_ic": metrics.get("ic_mean", float("nan")),
-                "valid_rank_ic": metrics.get("rank_ic_mean", float("nan")),
-                "learning_rate": learning_rate,
-            }
+        row = {
+            "epoch": epoch,
+            "train_loss": float(np.mean(train_losses)) if train_losses else float("nan"),
+            "valid_loss": valid_loss,
+            "valid_ic": metrics.get("ic_mean", float("nan")),
+            "valid_rank_ic": metrics.get("rank_ic_mean", float("nan")),
+            "learning_rate": learning_rate,
+        }
+        rows.append(row)
+        epoch_width = max(3, len(str(epochs)))
+        print(
+            f"epoch {epoch:0{epoch_width}d}/{epochs:0{epoch_width}d} | "
+            f"train_loss={row['train_loss']:.6f} | "
+            f"valid_loss={row['valid_loss']:.6f} | "
+            f"valid_ic={row['valid_ic']:.6f} | "
+            f"valid_rank_ic={row['valid_rank_ic']:.6f} | "
+            f"lr={row['learning_rate']:.6g}",
+            flush=True,
         )
         if stopper.best_value is None or valid_loss < stopper.best_value:
             best_state = deepcopy(torch_model.state_dict())
         if stopper.step(valid_loss):
+            print(
+                f"early stopping at epoch {epoch} | "
+                f"best_valid_loss={stopper.best_value:.6f} | patience={patience}",
+                flush=True,
+            )
             break
     if best_state is not None:
         torch_model.load_state_dict(best_state)

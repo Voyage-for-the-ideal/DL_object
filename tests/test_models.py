@@ -35,6 +35,15 @@ def test_mlp_forward_shape() -> None:
 def test_transformer_forward_shape() -> None:
     from src.models.transformer import TransformerRegressor
 
-    model = TransformerRegressor(input_dim=3, hidden_dim=8, num_layers=1, num_heads=2)
+    model = TransformerRegressor(input_dim=3, lookback=5, hidden_dim=8, num_layers=1, num_heads=2)
     output = model(torch_transformer.randn(2, 5, 3))
     assert tuple(output.shape) == (2,)
+
+
+@pytest.mark.skipif(torch_transformer is None, reason="PyTorch not installed")
+def test_transformer_rejects_tabular_2d_input() -> None:
+    from src.models.transformer import TransformerRegressor
+
+    model = TransformerRegressor(input_dim=3, lookback=5, hidden_dim=8, num_layers=1, num_heads=2)
+    with pytest.raises(ValueError, match="requires 3D input"):
+        model(torch_transformer.randn(2, 3))

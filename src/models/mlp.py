@@ -91,11 +91,14 @@ class TorchMLPAlphaModel(BaseAlphaModel):
                 optimizer.step()
         return self
 
-    def predict_array(self, X: np.ndarray) -> np.ndarray:
+    def predict_array(self, X: np.ndarray, batch_size: int = 4096) -> np.ndarray:
         self.model.eval()
+        scores: list[np.ndarray] = []
         with torch.no_grad():
-            tensor = torch.as_tensor(X, dtype=torch.float32, device=self.device)
-            return self.model(tensor).detach().cpu().numpy()
+            for start in range(0, len(X), batch_size):
+                batch = torch.as_tensor(X[start : start + batch_size], dtype=torch.float32, device=self.device)
+                scores.append(self.model(batch).detach().cpu().numpy())
+        return np.concatenate(scores)
 
     def save(self, path: str | Path) -> Path:
         target = Path(path)

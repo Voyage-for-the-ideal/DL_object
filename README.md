@@ -228,7 +228,7 @@ python train.py `
 | 路径 | 用途 |
 | --- | --- |
 | `大作业.md` | 课程原始要求。 |
-| `AGENTS.md` | 给代码助手看的项目约束和注意事项。 |
+| `CLAUDE.md` | 给代码助手看的项目约束和注意事项。 |
 | `README.md` | 项目说明和运行流程。 |
 | `requirements.txt` | Python 依赖。 |
 | `pyproject.toml` | Ruff、mypy、pytest 等工具配置。 |
@@ -247,7 +247,7 @@ python train.py `
 | `src/predict/daily_signal.py` | 使用训练好的模型生成每日股票打分信号。 |
 | `src/predict/daily_order.py` | 把每日信号转换为模拟盘订单建议。 |
 | `tests/` | 单元测试和流程级冒烟测试。 |
-| `doc/` | 设计文档、任务拆解和实验记录模板。 |
+| `doc/` | 课程设计文档（proposal、detailed-design）。 |
 | `A股数据/` | 原始课程数据，不应提交到代码仓库。 |
 | `outputs/` | 训练、评估、信号、订单和缓存输出，不应提交到代码仓库。 |
 

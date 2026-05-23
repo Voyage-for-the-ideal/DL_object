@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from pathlib import Path
 
 import pandas as pd
@@ -139,7 +140,22 @@ class CsvDataLoader:
             return pd.DataFrame(columns=NEWS_COLUMNS)
         return frame
 
-    def load_many_daily(self, trade_dates: list[str]) -> pd.DataFrame:
-        frames = [self.load_daily(date) for date in trade_dates]
+    def load_many_daily(
+        self,
+        trade_dates: list[str],
+        show_progress: bool = False,
+        desc: str = "load daily",
+    ) -> pd.DataFrame:
+        frames = [
+            self.load_daily(date) for date in _progress(trade_dates, desc, show_progress)
+        ]
         frames = [frame for frame in frames if not frame.empty]
         return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def _progress(items: list[str], desc: str, show_progress: bool) -> Iterable[str]:
+    if not show_progress:
+        return items
+    from tqdm.auto import tqdm
+
+    return tqdm(items, desc=desc, unit="date")

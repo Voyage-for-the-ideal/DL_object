@@ -24,10 +24,14 @@ class SklearnRegressorModel(BaseAlphaModel):
     @classmethod
     def elasticnet(
         cls,
-        alpha: float = 1.0,
+        alpha: float = 0.00001,
         l1_ratio: float = 0.5,
+        max_iter: int = 10000,
     ) -> "SklearnRegressorModel":
-        return cls(ElasticNet(alpha=alpha, l1_ratio=l1_ratio, max_iter=5000), "elasticnet")
+        return cls(
+            ElasticNet(alpha=alpha, l1_ratio=l1_ratio, max_iter=max_iter),
+            "elasticnet",
+        )
 
     def fit(self, X: np.ndarray, y: np.ndarray, **kwargs: Any) -> "SklearnRegressorModel":
         self.estimator.fit(X, y)
@@ -48,9 +52,9 @@ class SklearnRegressorModel(BaseAlphaModel):
         return cls(payload["estimator"], payload["model_name"])
 
 
-def create_linear_model(name: str) -> SklearnRegressorModel:
+def create_linear_model(name: str, **params: Any) -> SklearnRegressorModel:
     if name == "ridge":
-        return SklearnRegressorModel.ridge()
+        return SklearnRegressorModel.ridge(**params)
     if name == "elasticnet":
-        return SklearnRegressorModel.elasticnet()
+        return SklearnRegressorModel.elasticnet(**params)
     raise ValueError(f"Unsupported linear model: {name}")

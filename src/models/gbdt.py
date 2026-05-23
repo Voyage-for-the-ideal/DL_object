@@ -13,21 +13,50 @@ from sklearn.ensemble import HistGradientBoostingRegressor
 from src.models.base import BaseAlphaModel
 
 
-def _create_estimator() -> tuple[Any, str]:
+def _create_estimator(
+    learning_rate: float = 0.05,
+    n_estimators: int = 200,
+    max_iter: int = 100,
+    random_state: int | None = 42,
+) -> tuple[Any, str]:
     try:
         from lightgbm import LGBMRegressor
     except ImportError:
         return (
-            HistGradientBoostingRegressor(max_iter=100, learning_rate=0.05),
+            HistGradientBoostingRegressor(
+                max_iter=max_iter,
+                learning_rate=learning_rate,
+                random_state=random_state,
+            ),
             "hist_gradient_boosting",
         )
-    return LGBMRegressor(n_estimators=200, learning_rate=0.05, random_state=42), "lightgbm"
+    return (
+        LGBMRegressor(
+            n_estimators=n_estimators,
+            learning_rate=learning_rate,
+            random_state=random_state,
+        ),
+        "lightgbm",
+    )
 
 
 class GbdtRegressorModel(BaseAlphaModel):
-    def __init__(self, estimator: Any | None = None, model_name: str | None = None) -> None:
+    def __init__(
+        self,
+        estimator: Any | None = None,
+        model_name: str | None = None,
+        learning_rate: float = 0.05,
+        n_estimators: int = 200,
+        max_iter: int = 100,
+        random_state: int | None = 42,
+    ) -> None:
         if estimator is None:
-            estimator, fallback_name = _create_estimator()
+            estimator, fallback_name = _create_estimator(
+                learning_rate=learning_rate,
+                n_estimators=n_estimators,
+                max_iter=max_iter,
+                random_state=random_state,
+            )
             model_name = model_name or fallback_name
         self.estimator = estimator
         self.model_name = model_name or "gbdt"

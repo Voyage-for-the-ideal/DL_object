@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "WebFetch(domain:xinchengo.github.io)",
+      "WebSearch",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(curl -sL --max-time 15 \"https://xinchengo.github.io/ustc107/guides/ai/deep-learning-homework/\")",
+      "Bash(curl -v --max-time 10 \"https://xinchengo.github.io/ustc107/guides/ai/deep-learning-homework/\")",
+      "Bash(curl -v --max-time 10 \"https://raw.githubusercontent.com/xinchengo/ustc107/main/guides/ai/deep-learning-homework.md\")",
+      "Bash(curl *)",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"from src.config.loader import find_project_root; print\\('project root:', find_project_root\\(\\)\\)\")"
+    ]
+  }
+}

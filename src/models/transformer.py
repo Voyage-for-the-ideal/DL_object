@@ -31,20 +31,28 @@ if torch is not None:
             self.register_buffer("pe", pe.unsqueeze(0))
 
         def forward(self, x: torch.Tensor) -> torch.Tensor:
+            if x.size(1) > self.pe.size(1):
+                raise ValueError(
+                    "PositionalEncoding received a sequence longer than max_len: "
+                    f"{x.size(1)} > {self.pe.size(1)}"
+                )
             return x + self.pe[:, : x.size(1)]
 
     class TransformerRegressor(nn.Module):
         def __init__(
             self,
             input_dim: int,
+            lookback: int | None = None,
             hidden_dim: int = 128,
             num_layers: int = 2,
             num_heads: int = 4,
             dropout: float = 0.1,
         ) -> None:
             super().__init__()
+            self.input_dim = input_dim
+            self.lookback = lookback
             self.projection = nn.Linear(input_dim, hidden_dim)
-            self.position = PositionalEncoding(hidden_dim)
+            self.position = PositionalEncoding(hidden_dim, max_len=lookback or 512)
             layer = nn.TransformerEncoderLayer(
                 d_model=hidden_dim,
                 nhead=num_heads,
@@ -56,6 +64,22 @@ if torch is not None:
             self.head = nn.Sequential(nn.LayerNorm(hidden_dim), nn.Linear(hidden_dim, 1))
 
         def forward(self, x: torch.Tensor) -> torch.Tensor:
+            if x.dim() != 3:
+                raise ValueError(
+                    "TransformerRegressor requires 3D input shaped "
+                    "[batch, lookback, input_dim]; "
+                    f"received tensor with shape {tuple(x.shape)}"
+                )
+            if x.size(-1) != self.input_dim:
+                raise ValueError(
+                    f"TransformerRegressor expected input_dim={self.input_dim}, "
+                    f"received {x.size(-1)}"
+                )
+            if self.lookback is not None and x.size(1) != self.lookback:
+                raise ValueError(
+                    f"TransformerRegressor expected lookback={self.lookback}, "
+                    f"received {x.size(1)}"
+                )
             hidden = self.position(self.projection(x))
             encoded = self.encoder(hidden)
             return self.head(encoded[:, -1, :]).squeeze(-1)
@@ -76,19 +100,26 @@ class TorchTransformerAlphaModel(BaseAlphaModel):
         num_heads: int = 4,
         dropout: float = 0.1,
         device: str = "cpu",
+        lookback: int = 20,
     ) -> None:
         if torch is None:
             raise ImportError("PyTorch is required for TorchTransformerAlphaModel")
         self.model_name = "transformer_encoder"
         self.input_dim = input_dim
+        self.lookback = lookback
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
         self.num_heads = num_heads
         self.dropout = dropout
         self.device = torch.device(device)
-        self.model = TransformerRegressor(input_dim, hidden_dim, num_layers, num_heads, dropout).to(
-            self.device
-        )
+        self.model = TransformerRegressor(
+            input_dim=input_dim,
+            lookback=lookback,
+            hidden_dim=hidden_dim,
+            num_layers=num_layers,
+            num_heads=num_heads,
+            dropout=dropout,
+        ).to(self.device)
 
     def fit(self, X: np.ndarray, y: np.ndarray, **kwargs: Any) -> "TorchTransformerAlphaModel":
         epochs = int(kwargs.get("epochs", 10))
@@ -112,11 +143,14 @@ class TorchTransformerAlphaModel(BaseAlphaModel):
                 optimizer.step()
         return self
 
-    def predict_array(self, X: np.ndarray) -> np.ndarray:
+    def predict_array(self, X: np.ndarray, batch_size: int = 4096) -> np.ndarray:
         self.model.eval()
+        scores: list[np.ndarray] = []
         with torch.no_grad():
-            tensor = torch.as_tensor(X, dtype=torch.float32, device=self.device)
-            return self.model(tensor).detach().cpu().numpy()
+            for start in range(0, len(X), batch_size):
+                batch = torch.as_tensor(X[start : start + batch_size], dtype=torch.float32, device=self.device)
+                scores.append(self.model(batch).detach().cpu().numpy())
+        return np.concatenate(scores)
 
     def save(self, path: str | Path) -> Path:
         target = Path(path)
@@ -125,6 +159,7 @@ class TorchTransformerAlphaModel(BaseAlphaModel):
             {
                 "model_name": self.model_name,
                 "input_dim": self.input_dim,
+                "lookback": self.lookback,
                 "hidden_dim": self.hidden_dim,
                 "num_layers": self.num_layers,
                 "num_heads": self.num_heads,
@@ -142,6 +177,7 @@ class TorchTransformerAlphaModel(BaseAlphaModel):
         payload = torch.load(path, map_location="cpu")
         model = cls(
             input_dim=int(payload["input_dim"]),
+            lookback=int(payload.get("lookback", 20)),
             hidden_dim=int(payload["hidden_dim"]),
             num_layers=int(payload["num_layers"]),
             num_heads=int(payload["num_heads"]),

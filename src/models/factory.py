@@ -13,9 +13,9 @@ from src.models.transformer import TorchTransformerAlphaModel
 
 def create_model(name: str, input_dim: int, **kwargs: Any) -> BaseAlphaModel:
     if name in {"ridge", "elasticnet"}:
-        return create_linear_model(name)
+        return create_linear_model(name, **kwargs)
     if name in {"gbdt", "lightgbm"}:
-        return GbdtRegressorModel()
+        return GbdtRegressorModel(**kwargs)
     if name == "mlp":
         hidden_dim = int(kwargs.get("hidden_dim", 128))
         return TorchMLPAlphaModel(
@@ -31,6 +31,7 @@ def create_model(name: str, input_dim: int, **kwargs: Any) -> BaseAlphaModel:
             num_layers=int(kwargs.get("num_layers", 2)),
             num_heads=int(kwargs.get("num_heads", 4)),
             dropout=float(kwargs.get("dropout", 0.1)),
+            lookback=int(kwargs.get("lookback", 20)),
             device=str(kwargs.get("device", "cpu")),
         )
     raise ValueError(f"Unsupported model: {name}")

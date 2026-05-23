@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from src.backtest.portfolio import PortfolioState
 from src.data.calendar import TradingCalendar
@@ -10,6 +11,8 @@ from src.data.loader import CsvDataLoader
 from src.features.pipeline import build_latest_feature_frame
 from src.features.preprocess import TrainOnlyPreprocessor
 from src.models.linear import SklearnRegressorModel
+from src.models.transformer import TorchTransformerAlphaModel
+from src.models.transformer import torch as torch_transformer
 from src.predict.daily_order import ORDER_COLUMNS, generate_daily_orders
 from src.predict.daily_signal import generate_daily_signal, latest_available_signal_date
 
@@ -60,12 +63,13 @@ def test_signal_and_order_fields_complete() -> None:
             "trade_date": ["20200101", "20200101", "20200101"],
             "ts_code": ["A", "B", "C"],
             "feature": [1.0, 2.0, 3.0],
-            "label_1d": [0.1, 0.2, 0.3],
         }
     )
-    pre = TrainOnlyPreprocessor().fit(features, ["feature"])
+    train_features = features.assign(label_1d=[0.1, 0.2, 0.3])
+    pre = TrainOnlyPreprocessor().fit(train_features, ["feature"])
     model = SklearnRegressorModel.ridge().fit(
-        pre.transform(features)[["feature"]].to_numpy(), features["label_1d"].to_numpy()
+        pre.transform(train_features)[["feature"]].to_numpy(),
+        train_features["label_1d"].to_numpy(),
     )
     signal = generate_daily_signal(features, model, pre, "20200101", "20200102")
     assert list(signal.columns) == [
@@ -85,3 +89,55 @@ def test_signal_and_order_fields_complete() -> None:
     )
     orders = generate_daily_orders(signal, quotes, PortfolioState(cash=10000), top_k=2)
     assert list(orders.columns) == ORDER_COLUMNS
+
+
+@pytest.mark.skipif(torch_transformer is None, reason="PyTorch not installed")
+def test_transformer_signal_uses_recent_windows() -> None:
+    features = pd.DataFrame(
+        {
+            "trade_date": ["20200101", "20200101", "20200102", "20200102"],
+            "ts_code": ["A", "B", "A", "B"],
+            "feature": [1.0, 10.0, 2.0, 20.0],
+        }
+    )
+    pre = TrainOnlyPreprocessor().fit(features.assign(label_1d=0.0), ["feature"])
+    model = TorchTransformerAlphaModel(
+        input_dim=1,
+        lookback=2,
+        hidden_dim=8,
+        num_layers=1,
+        num_heads=2,
+        dropout=0.0,
+    )
+    signal = generate_daily_signal(features, model, pre, "20200102", "20200103")
+    assert signal["ts_code"].tolist() == ["A", "B"]
+    assert list(signal.columns) == [
+        "signal_date",
+        "next_trade_date",
+        "ts_code",
+        "score",
+        "rank",
+        "model_name",
+    ]
+
+
+@pytest.mark.skipif(torch_transformer is None, reason="PyTorch not installed")
+def test_transformer_signal_requires_history() -> None:
+    features = pd.DataFrame(
+        {
+            "trade_date": ["20200102", "20200102"],
+            "ts_code": ["A", "B"],
+            "feature": [2.0, 20.0],
+        }
+    )
+    pre = TrainOnlyPreprocessor().fit(features.assign(label_1d=0.0), ["feature"])
+    model = TorchTransformerAlphaModel(
+        input_dim=1,
+        lookback=2,
+        hidden_dim=8,
+        num_layers=1,
+        num_heads=2,
+        dropout=0.0,
+    )
+    with pytest.raises(ValueError, match="at least 2 dates"):
+        generate_daily_signal(features, model, pre, "20200102", "20200103")

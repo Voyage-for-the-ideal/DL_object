@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 
-from src.data.schema import TRADE_DATE, TS_CODE
+from src.data.schema import TRADE_DATE, TS_CODE, normalize_trade_date, normalize_trade_date_column
 from src.datasets.tabular_dataset import select_feature_columns
 
 
@@ -28,16 +29,27 @@ class WindowDataset:
         feature_columns: list[str] | None = None,
         label_column: str = "label_1d",
         drop_missing_history: bool = True,
+        end_dates: Iterable[str] | None = None,
     ) -> "WindowDataset":
-        columns = feature_columns or select_feature_columns(frame, label_column)
+        if lookback < 1:
+            raise ValueError("lookback must be at least 1")
+        data = normalize_trade_date_column(frame)
+        columns = feature_columns or select_feature_columns(data, label_column)
+        allowed_end_dates = (
+            {normalize_trade_date(date) for date in end_dates} if end_dates is not None else None
+        )
         windows: list[np.ndarray] = []
         labels: list[float] = []
         index_rows: list[dict[str, str]] = []
-        for ts_code, group in frame.sort_values([TS_CODE, TRADE_DATE]).groupby(TS_CODE):
+        for ts_code, group in data.sort_values([TS_CODE, TRADE_DATE]).groupby(TS_CODE):
             group = group.reset_index(drop=True)
-            feature_values = group[columns].apply(pd.to_numeric, errors="coerce").fillna(0.0)
+            feature_values = group.reindex(columns=columns).apply(pd.to_numeric, errors="coerce")
+            feature_values = feature_values.fillna(0.0)
             label_values = pd.to_numeric(group[label_column], errors="coerce")
             for position in range(len(group)):
+                end_date = str(group.loc[position, TRADE_DATE])
+                if allowed_end_dates is not None and end_date not in allowed_end_dates:
+                    continue
                 start = position - lookback + 1
                 if start < 0 and drop_missing_history:
                     continue
@@ -52,12 +64,12 @@ class WindowDataset:
                 windows.append(window)
                 labels.append(float(label_values.iloc[position]))
                 index_rows.append(
-                    {TRADE_DATE: str(group.loc[position, TRADE_DATE]), TS_CODE: str(ts_code)}
+                    {TRADE_DATE: end_date, TS_CODE: str(ts_code)}
                 )
         X = (
             np.stack(windows).astype(np.float32)
             if windows
-            else np.empty((0, lookback, len(columns)))
+            else np.empty((0, lookback, len(columns)), dtype=np.float32)
         )
         y = np.asarray(labels, dtype=np.float32)
         index = pd.DataFrame(index_rows, columns=[TRADE_DATE, TS_CODE])

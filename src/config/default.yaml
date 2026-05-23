@@ -1,10 +1,10 @@
 data:
   root: "A股数据"
-  start_date: "2019-01-01"
+  start_date: "2016-01-04"
   train_end_date: "2025-12-31"
   valid_start_date: "2026-01-01"
   valid_end_date: "2026-05-20"
-  universe_mode: "hs300"
+  universe_mode: "official"
   official_universe_exclude_st: true
   official_universe_exclude_bse: true
 
@@ -13,12 +13,12 @@ label:
   horizons: [1, 3, 5]
 
 features:
-  lookback_windows: [5, 10, 20]
+  lookback_windows: [5, 10, 20, 60]
   use_price: true
   use_metric: true
   use_moneyflow: true
   use_news_tfidf: true
-  news_tfidf_max_features: 128
+  news_tfidf_max_features: 256
   news_cutoff_time: null
 
 preprocess:
@@ -35,22 +35,34 @@ dataset:
   min_history_days: 20
 
 model:
-  name: "transformer_encoder"
+  name: "mlp"
   task: "regression"
   input_dim: null
-  hidden_dim: 128
-  dropout: 0.1
-  num_layers: 2
-  num_heads: 4
+  hidden_dim: 256
+  dropout: 0.15
+  num_layers: 3
+  num_heads: 8
+  device: "cpu"
+  ridge:
+    alpha: 10.0
+  elasticnet:
+    alpha: 0.0001
+    l1_ratio: 0.5
+    max_iter: 20000
+  gbdt:
+    learning_rate: 0.03
+    n_estimators: 600
+    max_iter: 600
+    random_state: 42
 
 training:
   seed: 42
-  batch_size: 1024
-  epochs: 50
-  learning_rate: 0.001
+  batch_size: 4096
+  epochs: 100
+  learning_rate: 0.0005
   loss: "mse"
-  early_stopping_patience: 5
-  device: "auto"
+  early_stopping_patience: 10
+  device: "cpu"
 
 backtest:
   initial_cash: 1000000
@@ -75,4 +87,3 @@ strategy:
 
 outputs:
   root: "outputs"
-
