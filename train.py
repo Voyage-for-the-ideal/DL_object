@@ -28,7 +28,8 @@ def main() -> None:
     run_dir = make_run_dir(config["outputs"]["root"], args.run_id)
     train_frame = pd.read_csv(args.train_panel)
     valid_frame = pd.read_csv(args.valid_panel)
-    train_tabular_model(train_frame, valid_frame, config, run_dir)
+    label_column = config.get("label", {}).get("main", "label_5d")
+    train_tabular_model(train_frame, valid_frame, config, run_dir, label_column=label_column)
     print(Path(run_dir))
 
 

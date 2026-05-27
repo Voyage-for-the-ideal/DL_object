@@ -31,6 +31,9 @@ METRIC_COLUMNS = [
 NEWS_COLUMNS = ["datetime", "content", "title"]
 INDEX_WEIGHT_COLUMNS = ["index_code", "con_code", TRADE_DATE, "weight"]
 
+STOCK_NEWS_STAT_COLUMNS = ["stock_news_count", "stock_title_count", "stock_avg_content_length"]
+STOCK_NEWS_TFIDF_PREFIX = "stock_news_tfidf_"
+
 
 def normalize_trade_date(value: object) -> str:
     """Convert common date representations to ``YYYYMMDD``."""

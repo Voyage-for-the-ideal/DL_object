@@ -1,4 +1,4 @@
-"""Market-level TF-IDF news features."""
+"""Market-level TF-IDF and FinBERT news features."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.decomposition import TruncatedSVD
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 from src.data.news_features import aggregate_news
@@ -64,6 +65,120 @@ class NewsTfidfFeatureGenerator:
     @classmethod
     def load(cls, path: str | Path) -> "NewsTfidfFeatureGenerator":
         return joblib.load(path)
+
+
+class NewsFinbertFeatureGenerator:
+    """FinBERT embeddings + TruncatedSVD for market-level news features.
+
+    Fit FinBERT on training-period aggregated news to extract 768-dim embeddings,
+    then fit TruncatedSVD to compress to svd_dim. BERT weights are NOT saved —
+    only SVD + model_name are serialized; the BERT model is re-downloaded on load.
+    """
+
+    def __init__(
+        self,
+        model_name: str = "yiyanghkust/finbert-tone-chinese",
+        svd_dim: int = 16,
+        device: str = "cpu",
+    ) -> None:
+        self.model_name = model_name
+        self.svd_dim = svd_dim
+        self.device = device
+        self.svd = TruncatedSVD(n_components=svd_dim, random_state=42)
+        self.fitted = False
+        self._tokenizer: object = None
+        self._model: object = None
+
+    @property
+    def feature_names(self) -> list[str]:
+        return [f"finbert_{i:02d}" for i in range(self.svd_dim)]
+
+    def _load_bert(self) -> None:
+        from transformers import AutoModel, AutoTokenizer  # type: ignore[import-untyped]
+
+        self._tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        self._model = AutoModel.from_pretrained(self.model_name)
+        self._model.eval()
+        self._model.to(self.device)
+
+    def _encode_texts(self, texts: pd.Series) -> np.ndarray:
+        if self._tokenizer is None or self._model is None:
+            self._load_bert()
+
+        text_list = texts.fillna("").astype(str).tolist()
+        all_embeddings: list[np.ndarray] = []
+        batch_size = 32
+
+        import torch
+
+        with torch.no_grad():
+            for i in range(0, len(text_list), batch_size):
+                batch = text_list[i : i + batch_size]
+                inputs = self._tokenizer(
+                    batch,
+                    return_tensors="pt",
+                    truncation=True,
+                    max_length=512,
+                    padding=True,
+                )
+                inputs = {k: v.to(self.device) for k, v in inputs.items()}
+                outputs = self._model(**inputs)
+                emb = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
+                all_embeddings.append(emb)
+
+        return np.vstack(all_embeddings)
+
+    def fit(self, aggregated_news: pd.DataFrame) -> "NewsFinbertFeatureGenerator":
+        texts = aggregated_news.get("aggregated_text", pd.Series(dtype=str))
+        embeddings = self._encode_texts(texts)
+        self.svd.fit(embeddings)
+        self.fitted = True
+        return self
+
+    def transform(
+        self,
+        aggregated_news: pd.DataFrame,
+        dates: list[str] | None = None,
+    ) -> pd.DataFrame:
+        if not self.fitted:
+            raise RuntimeError("NewsFinbertFeatureGenerator must be fit before transform")
+        base = _ensure_news_rows(aggregated_news, dates)
+        texts = base["aggregated_text"]
+        embeddings = self._encode_texts(texts)
+        reduced = self.svd.transform(embeddings)
+        features = pd.DataFrame(reduced, columns=self.feature_names)
+        return pd.concat(
+            [base.drop(columns=["aggregated_text"]).reset_index(drop=True), features],
+            axis=1,
+        )
+
+    def fit_transform(self, aggregated_news: pd.DataFrame) -> pd.DataFrame:
+        return self.fit(aggregated_news).transform(aggregated_news)
+
+    def save(self, path: str | Path) -> Path:
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(
+            {
+                "model_name": self.model_name,
+                "svd_dim": self.svd_dim,
+                "svd": self.svd,
+                "fitted": self.fitted,
+            },
+            target,
+        )
+        return target
+
+    @classmethod
+    def load(cls, path: str | Path) -> "NewsFinbertFeatureGenerator":
+        data = joblib.load(path)
+        instance = cls(
+            model_name=data["model_name"],
+            svd_dim=data["svd_dim"],
+        )
+        instance.svd = data["svd"]
+        instance.fitted = data["fitted"]
+        return instance
 
 
 def _ensure_news_rows(aggregated_news: pd.DataFrame, dates: list[str] | None) -> pd.DataFrame:

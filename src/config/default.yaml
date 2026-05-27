@@ -9,7 +9,9 @@ data:
   official_universe_exclude_bse: true
 
 label:
-  main: "label_1d"
+  main: "label_5d"
+  # main: "label_5d_vol_norm" # 波动率标准化
+  # main: "label_5d_cs_rank"  # cross-sectional rank
   horizons: [1, 3, 5]
 
 features:
@@ -17,9 +19,13 @@ features:
   use_price: true
   use_metric: true
   use_moneyflow: true
-  use_news_tfidf: true
-  news_tfidf_max_features: 256
+  use_news_finbert: false
+  news_finbert_model: "yiyanghkust/finbert-tone-chinese"
+  news_finbert_svd_dim: 16
   news_cutoff_time: null
+  use_stock_news: false
+  stock_news_tfidf_max_features: 256
+  stock_news_svd_dim: 16
 
 preprocess:
   winsorize: true
@@ -38,10 +44,10 @@ model:
   name: "mlp"
   task: "regression"
   input_dim: null
-  hidden_dim: 256
-  dropout: 0.15
-  num_layers: 3
-  num_heads: 8
+  hidden_dim: 128
+  dropout: 0.3
+  num_layers: 2
+  num_heads: 4
   device: "cpu"
   ridge:
     alpha: 10.0
@@ -60,6 +66,7 @@ training:
   batch_size: 4096
   epochs: 100
   learning_rate: 0.0005
+  weight_decay: 0.0001
   loss: "mse"
   early_stopping_patience: 10
   device: "cpu"

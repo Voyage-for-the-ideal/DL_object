@@ -41,6 +41,15 @@ temp/
 .vscode/
 .idea/
 
+# Downloaded HuggingFace / pretrained models
+finbert-tone-chinese/
+
+# Slurm output logs
+slurm/
+
+# Local Claude Code settings
+.claude/settings.local.json
+
 # OS files
 .DS_Store
 Thumbs.db

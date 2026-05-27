@@ -169,8 +169,9 @@ def _fit_torch_tabular_with_log(
     epochs = int(training_config.get("epochs", 50))
     batch_size = int(training_config.get("batch_size", 1024))
     learning_rate = float(training_config.get("learning_rate", 0.001))
+    weight_decay = float(training_config.get("weight_decay", 0.0))
     patience = int(training_config.get("early_stopping_patience", 5))
-    optimizer = torch.optim.Adam(torch_model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.Adam(torch_model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     criterion = torch.nn.MSELoss()
     loader = torch.utils.data.DataLoader(
         torch.utils.data.TensorDataset(

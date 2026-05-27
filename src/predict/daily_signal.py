@@ -15,6 +15,7 @@ from src.datasets.tabular_dataset import TabularDataset
 from src.datasets.window_dataset import WindowDataset
 from src.features.pipeline import build_latest_feature_frame, build_recent_feature_frame
 from src.features.preprocess import TrainOnlyPreprocessor
+from src.features.news_features import NewsFinbertFeatureGenerator
 from src.models.base import BaseAlphaModel
 from src.models.gbdt import GbdtRegressorModel
 from src.models.linear import SklearnRegressorModel
@@ -106,6 +107,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--preprocessor", required=True)
     parser.add_argument("--model", required=True)
     parser.add_argument("--model-name", default="ridge")
+    parser.add_argument("--news-generator", default=None)
+    parser.add_argument("--stock-news-generator", default=None)
     args = parser.parse_args(argv)
     config = load_config(args.config)
     loader = CsvDataLoader(config["data"]["root"])
@@ -114,6 +117,29 @@ def main(argv: list[str] | None = None) -> None:
     next_trade_date = calendar.next_trade_date(signal_date)
     preprocessor = TrainOnlyPreprocessor.load(args.preprocessor)
     model = load_model_artifact(args.model, args.model_name)
+
+    news_gen = None
+    gen_path = args.news_generator
+    if gen_path is None:
+        default_gen = Path(config["outputs"]["root"]) / "cache" / "panels" / "news_finbert_generator.joblib"
+        if default_gen.exists():
+            gen_path = str(default_gen)
+    if gen_path:
+        news_gen = NewsFinbertFeatureGenerator.load(gen_path)
+
+    stock_news_gen = None
+    stock_gen_path = args.stock_news_generator
+    if stock_gen_path is None:
+        default_stock_gen = (
+            Path(config["outputs"]["root"]) / "cache" / "panels" / "stock_news_generator.joblib"
+        )
+        if default_stock_gen.exists():
+            stock_gen_path = str(default_stock_gen)
+    if stock_gen_path:
+        from src.features.stock_news_features import StockNewsFeatureGenerator
+
+        stock_news_gen = StockNewsFeatureGenerator.load(stock_gen_path)
+
     if args.feature_file:
         features = pd.read_csv(args.feature_file)
     elif args.model_name == "transformer_encoder":
@@ -124,6 +150,8 @@ def main(argv: list[str] | None = None) -> None:
             lookback=int(getattr(model, "lookback", config.get("dataset", {}).get("lookback", 20))),
             universe_mode=str(config.get("data", {}).get("universe_mode", "official")),
             feature_windows=tuple(config.get("features", {}).get("lookback_windows", [5, 10, 20])),
+            news_generator=news_gen,
+            stock_news_generator=stock_news_gen,
         )
     else:
         features = build_latest_feature_frame(
@@ -132,6 +160,8 @@ def main(argv: list[str] | None = None) -> None:
             signal_date,
             lookback=int(config.get("dataset", {}).get("lookback", 20)),
             universe_mode=str(config.get("data", {}).get("universe_mode", "official")),
+            news_generator=news_gen,
+            stock_news_generator=stock_news_gen,
         )
     signal = generate_daily_signal(features, model, preprocessor, signal_date, next_trade_date)
     save_signal(signal, config["outputs"]["root"], signal_date)
