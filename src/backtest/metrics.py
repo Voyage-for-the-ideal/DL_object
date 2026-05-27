@@ -35,6 +35,27 @@ def summarize_nav(nav_frame: pd.DataFrame, periods_per_year: int = 252) -> dict[
     }
 
 
+def compare_nav(
+    strategy_nav: pd.DataFrame,
+    benchmark_nav: pd.DataFrame | None = None,
+    benchmark_label: str = "benchmark",
+    periods_per_year: int = 252,
+) -> dict[str, dict[str, float]]:
+    result: dict[str, dict[str, float]] = {
+        "strategy": summarize_nav(strategy_nav, periods_per_year=periods_per_year),
+    }
+    if benchmark_nav is not None and not benchmark_nav.empty:
+        bench_col = (
+            "benchmark_nav" if "benchmark_nav" in benchmark_nav.columns
+            else benchmark_nav.columns[-1]
+        )
+        result[f"benchmark_{benchmark_label}"] = summarize_nav(
+            benchmark_nav.rename(columns={bench_col: "nav"}),
+            periods_per_year=periods_per_year,
+        )
+    return result
+
+
 def benchmark_nav(
     market: pd.DataFrame,
     start_date: str,
@@ -42,9 +63,13 @@ def benchmark_nav(
     price_column: str = "close",
 ) -> pd.DataFrame:
     """Convert benchmark market prices, e.g. HS300 or SSE, into normalized NAV."""
+    from src.data.schema import normalize_trade_date
+
+    start = normalize_trade_date(start_date)
+    end = normalize_trade_date(end_date)
     frame = market.copy()
     frame[TRADE_DATE] = frame[TRADE_DATE].astype(str)
-    frame = frame[(frame[TRADE_DATE] >= start_date) & (frame[TRADE_DATE] <= end_date)]
+    frame = frame[(frame[TRADE_DATE] >= start) & (frame[TRADE_DATE] <= end)]
     frame = frame.sort_values(TRADE_DATE)
     if frame.empty:
         return pd.DataFrame(columns=[TRADE_DATE, "benchmark_nav"])

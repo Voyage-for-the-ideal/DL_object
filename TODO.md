@@ -30,18 +30,18 @@
 
 ## 大作业硬性要求缺口
 
-- [ ] 12. 回测引擎缺少 CLI 入口
+- [x] 12. 回测引擎缺少 CLI 入口
   - `src/backtest/engine.py` 中 `BacktestEngine.run()` 已完整实现（NAV 跟踪、年化收益、夏普比率、最大回撤、NAV 曲线图）
   - 但项目中没有 `backtest.py` 或等效命令行入口，无法对历史区间运行完整回测模拟
   - 大作业要求 "推荐实现历史回测；不实现会影响分数"
   - README 提到了 `outputs/backtest/{run_id}/` 目录但没给出生成命令
 
-- [ ] 13. 回测缺少与市场指数的对比
+- [x] 13. 回测缺少与市场指数的对比
   - 大作业提到 "可以和上证指数，沪深300指数做对比"
   - `src/backtest/metrics.py:38-53` 已有 `benchmark_nav()` 函数，但未被任何地方调用
   - 回测流程没有加载指数基准数据并做对比
 
-- [ ] 14. config 标志未生效（小问题）
+- [x] 14. config 标志未生效（小问题）
 - [ ] 15. 接入 FinBERT 新闻特征
   - NewsFinbertFeatureGenerator (FinBERT + TruncatedSVD 768→16)
   - 集成到 prepare_panels.py 和 daily_signal.py

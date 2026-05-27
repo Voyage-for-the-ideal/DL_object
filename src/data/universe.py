@@ -14,6 +14,8 @@ from src.data.schema import TRADE_DATE, TS_CODE, normalize_trade_date
 class UniverseBuilder:
     loader: CsvDataLoader
     min_amount: float = 0.0
+    exclude_st: bool = True
+    exclude_bse: bool = True
 
     def get_hs300_universe(self, trade_date: str) -> set[str]:
         weights = self.loader.load_index_weight(trade_date=trade_date, index_code="000300.SH")
@@ -21,15 +23,17 @@ class UniverseBuilder:
             return set()
         return set(weights["con_code"].astype(str))
 
-    def _basic_universe_without_bse(self) -> set[str]:
+    def _basic_universe(self) -> set[str]:
         basic = self.loader.load_basic()
         if basic.empty:
             return set()
         frame = basic.copy()
-        market = frame.get("market", pd.Series("", index=frame.index)).astype(str)
-        code = frame[TS_CODE].astype(str)
-        allowed = ~market.str.contains("北交", na=False) & ~code.str.endswith(".BJ")
-        return set(frame.loc[allowed, TS_CODE].astype(str))
+        if self.exclude_bse:
+            market = frame.get("market", pd.Series("", index=frame.index)).astype(str)
+            code = frame[TS_CODE].astype(str)
+            allowed = ~market.str.contains("北交", na=False) & ~code.str.endswith(".BJ")
+            return set(frame.loc[allowed, TS_CODE].astype(str))
+        return set(frame[TS_CODE].astype(str))
 
     def get_st_universe(self, trade_date: str) -> set[str]:
         target = normalize_trade_date(trade_date)
@@ -43,8 +47,10 @@ class UniverseBuilder:
         return set(st[TS_CODE].astype(str))
 
     def get_official_universe(self, trade_date: str) -> set[str]:
-        universe = self._basic_universe_without_bse()
-        return universe - self.get_st_universe(trade_date)
+        universe = self._basic_universe()
+        if self.exclude_st:
+            universe = universe - self.get_st_universe(trade_date)
+        return universe
 
     def get_tradeable_universe(self, trade_date: str, mode: str = "official") -> set[str]:
         if mode == "hs300":

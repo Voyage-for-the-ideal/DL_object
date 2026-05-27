@@ -125,6 +125,8 @@ def main() -> None:
         show_progress=True,
         news_generator=news_gen,
         stock_news_generator=stock_news_gen,
+        exclude_st=bool(config["data"].get("official_universe_exclude_st", True)),
+        exclude_bse=bool(config["data"].get("official_universe_exclude_bse", True)),
     )
     labels = add_forward_return_labels(
         loader.load_many_daily(

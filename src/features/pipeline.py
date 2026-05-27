@@ -33,6 +33,8 @@ def build_feature_panel(
     show_progress: bool = False,
     news_generator: "NewsFinbertFeatureGenerator | None" = None,
     stock_news_generator: "StockNewsFeatureGenerator | None" = None,
+    exclude_st: bool = True,
+    exclude_bse: bool = True,
 ) -> pd.DataFrame:
     """Build a merged feature panel for supplied signal dates."""
     daily_dates = _progress(trade_dates, "load daily", show_progress)
@@ -98,7 +100,7 @@ def build_feature_panel(
     panel = merge_feature_frames(feature_frames)
     if panel.empty:
         return panel
-    universe = UniverseBuilder(loader, min_amount=min_amount)
+    universe = UniverseBuilder(loader, min_amount=min_amount, exclude_st=exclude_st, exclude_bse=exclude_bse)
     allowed_rows: list[pd.DataFrame] = []
     grouped = list(panel.groupby(TRADE_DATE))
     for trade_date, group in _progress(grouped, "filter universe", show_progress):
@@ -115,12 +117,16 @@ def build_latest_feature_frame(
     universe_mode: str = "official",
     news_generator: "NewsFinbertFeatureGenerator | None" = None,
     stock_news_generator: "StockNewsFeatureGenerator | None" = None,
+    exclude_st: bool = True,
+    exclude_bse: bool = True,
 ) -> pd.DataFrame:
     """Build only the latest signal-date rows, reading no future daily files."""
     panel = build_recent_feature_frame(
         loader, calendar, signal_date, lookback, universe_mode,
         news_generator=news_generator,
         stock_news_generator=stock_news_generator,
+        exclude_st=exclude_st,
+        exclude_bse=exclude_bse,
     )
     return panel[panel[TRADE_DATE].astype(str) == signal_date].reset_index(drop=True)
 
@@ -134,6 +140,8 @@ def build_recent_feature_frame(
     feature_windows: tuple[int, ...] = (5, 10, 20),
     news_generator: "NewsFinbertFeatureGenerator | None" = None,
     stock_news_generator: "StockNewsFeatureGenerator | None" = None,
+    exclude_st: bool = True,
+    exclude_bse: bool = True,
 ) -> pd.DataFrame:
     """Build recent signal-date history for sequence models without reading future files."""
     all_dates = calendar.trade_dates_between(calendar.trade_dates[0], signal_date)
@@ -144,6 +152,8 @@ def build_recent_feature_frame(
         loader, dates, universe_mode=universe_mode, windows=feature_windows,
         news_generator=news_generator,
         stock_news_generator=stock_news_generator,
+        exclude_st=exclude_st,
+        exclude_bse=exclude_bse,
     )
     sequence_dates = set(all_dates[-max(lookback, 1) :])
     return panel[panel[TRADE_DATE].astype(str).isin(sequence_dates)].reset_index(drop=True)

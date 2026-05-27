@@ -11,7 +11,7 @@ import pandas as pd
 from src.backtest.execution import ExecutionConfig, ExecutionEngine
 from src.backtest.metrics import summarize_nav
 from src.backtest.portfolio import PortfolioState
-from src.backtest.strategy import ScoreWeightedRiskControlStrategy, rebalance_orders
+from src.backtest.strategy import ScoreWeightedRiskControlStrategy, TopKEqualWeightStrategy, rebalance_orders
 from src.data.calendar import TradingCalendar
 from src.data.schema import TRADE_DATE, TS_CODE
 from src.utils.io import ensure_dir
@@ -21,7 +21,7 @@ class BacktestEngine:
     def __init__(
         self,
         calendar: TradingCalendar,
-        strategy: ScoreWeightedRiskControlStrategy | None = None,
+        strategy: TopKEqualWeightStrategy | ScoreWeightedRiskControlStrategy | None = None,
         execution: ExecutionEngine | None = None,
         initial_cash: float = 1_000_000,
     ) -> None:
@@ -84,18 +84,52 @@ class BacktestEngine:
             self.save_outputs(outputs, output_dir)
         return outputs
 
-    def save_outputs(self, outputs: dict[str, pd.DataFrame], output_dir: str | Path) -> None:
+    def save_outputs(
+        self,
+        outputs: dict[str, pd.DataFrame],
+        output_dir: str | Path,
+        benchmark_nav_frame: pd.DataFrame | None = None,
+        benchmark_label: str = "沪深300",
+        strategy_label: str = "strategy",
+    ) -> dict[str, float]:
         target = ensure_dir(output_dir)
         for name, frame in outputs.items():
             frame.to_csv(target / f"{name}.csv", index=False)
         metrics = summarize_nav(outputs["nav"])
+        if benchmark_nav_frame is not None and not benchmark_nav_frame.empty:
+            benchmark_col = (
+                "benchmark_nav" if "benchmark_nav" in benchmark_nav_frame.columns
+                else benchmark_nav_frame.columns[-1]
+            )
+            bench_metrics = summarize_nav(
+                benchmark_nav_frame.rename(columns={benchmark_col: "nav"})
+            )
+            metrics = {
+                strategy_label: metrics,
+                f"benchmark_{benchmark_label}": bench_metrics,
+            }
         with (target / "backtest_metrics.json").open("w", encoding="utf-8") as file:
             json.dump(metrics, file, ensure_ascii=False, indent=2)
         if not outputs["nav"].empty:
-            outputs["nav"].plot(x=TRADE_DATE, y="nav")
-            plt.tight_layout()
-            plt.savefig(target / "nav_curve.png")
-            plt.close()
+            fig, ax = plt.subplots()
+            ax.plot(outputs["nav"][TRADE_DATE], outputs["nav"]["nav"], label=strategy_label)
+            if benchmark_nav_frame is not None and not benchmark_nav_frame.empty:
+                bench_col = (
+                    "benchmark_nav" if "benchmark_nav" in benchmark_nav_frame.columns
+                    else benchmark_nav_frame.columns[-1]
+                )
+                ax.plot(
+                    benchmark_nav_frame[TRADE_DATE],
+                    benchmark_nav_frame[bench_col],
+                    label=benchmark_label,
+                )
+            ax.legend()
+            ax.set_ylabel("NAV")
+            ax.set_title("Backtest NAV")
+            fig.tight_layout()
+            fig.savefig(target / "nav_curve.png")
+            plt.close(fig)
+        return metrics
 
 
 def _prices_from_daily(daily: pd.DataFrame) -> dict[str, float]:

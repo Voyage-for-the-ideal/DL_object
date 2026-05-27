@@ -10,7 +10,16 @@
       "Bash(curl -v --max-time 10 \"https://raw.githubusercontent.com/xinchengo/ustc107/main/guides/ai/deep-learning-homework.md\")",
       "Bash(curl *)",
       "Bash(python -c ' *)",
-      "Bash(python -c \"from src.config.loader import find_project_root; print\\('project root:', find_project_root\\(\\)\\)\")"
+      "Bash(python -c \"from src.config.loader import find_project_root; print\\('project root:', find_project_root\\(\\)\\)\")",
+      "Bash(conda info *)",
+      "Bash(where python *)",
+      "Read(//home/scc/pb23151808/software/miniconda3/**)",
+      "Bash(D:/conda_envs/d2l/python.exe -m pip install \"transformers>=4.30\")",
+      "Bash(grep -n \"=== \" C:\\\\\\\\Users\\\\\\\\27283\\\\\\\\.claude\\\\\\\\projects\\\\\\\\D--code-DL-foundation-DL-object\\\\\\\\b6cdd44a-d7a0-450f-b8fc-48509453bfe3\\\\\\\\tool-results\\\\\\\\bv02t7kg1.txt)",
+      "Bash(grep -oP '[^\\\\x00-\\\\x7F]{2,4}\\\\\\(\\\\d{6}\\\\\\)' \"A股数据/news/20190103.csv\")",
+      "Bash(python *)",
+      "Bash(sed 's/.*\\\\.//')",
+      "Bash(conda run *)"
     ]
   }
 }

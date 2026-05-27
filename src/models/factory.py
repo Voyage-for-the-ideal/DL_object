@@ -2,13 +2,26 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from src.models.base import BaseAlphaModel
 from src.models.gbdt import GbdtRegressorModel
-from src.models.linear import create_linear_model
+from src.models.linear import SklearnRegressorModel, create_linear_model
 from src.models.mlp import TorchMLPAlphaModel
 from src.models.transformer import TorchTransformerAlphaModel
+
+
+def load_model_artifact(path: str | Path, model_name: str) -> BaseAlphaModel:
+    if model_name in {"ridge", "elasticnet"}:
+        return SklearnRegressorModel.load(path)
+    if model_name in {"gbdt", "lightgbm", "hist_gradient_boosting"}:
+        return GbdtRegressorModel.load(path)
+    if model_name == "mlp":
+        return TorchMLPAlphaModel.load(path)
+    if model_name == "transformer_encoder":
+        return TorchTransformerAlphaModel.load(path)
+    raise ValueError(f"Unsupported model artifact type: {model_name}")
 
 
 def create_model(name: str, input_dim: int, **kwargs: Any) -> BaseAlphaModel:

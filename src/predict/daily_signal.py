@@ -17,10 +17,7 @@ from src.features.pipeline import build_latest_feature_frame, build_recent_featu
 from src.features.preprocess import TrainOnlyPreprocessor
 from src.features.news_features import NewsFinbertFeatureGenerator
 from src.models.base import BaseAlphaModel
-from src.models.gbdt import GbdtRegressorModel
-from src.models.linear import SklearnRegressorModel
-from src.models.mlp import TorchMLPAlphaModel
-from src.models.transformer import TorchTransformerAlphaModel
+from src.models.factory import load_model_artifact
 from src.utils.io import ensure_dir
 
 
@@ -29,18 +26,6 @@ def latest_available_signal_date(loader: CsvDataLoader, max_date: str | None = N
     if latest is None:
         raise FileNotFoundError("No daily CSV files found")
     return latest
-
-
-def load_model_artifact(path: str | Path, model_name: str) -> BaseAlphaModel:
-    if model_name in {"ridge", "elasticnet"}:
-        return SklearnRegressorModel.load(path)
-    if model_name in {"gbdt", "lightgbm", "hist_gradient_boosting"}:
-        return GbdtRegressorModel.load(path)
-    if model_name == "mlp":
-        return TorchMLPAlphaModel.load(path)
-    if model_name == "transformer_encoder":
-        return TorchTransformerAlphaModel.load(path)
-    raise ValueError(f"Unsupported model artifact type: {model_name}")
 
 
 def generate_daily_signal(
@@ -140,6 +125,7 @@ def main(argv: list[str] | None = None) -> None:
 
         stock_news_gen = StockNewsFeatureGenerator.load(stock_gen_path)
 
+    data_config = config.get("data", {})
     if args.feature_file:
         features = pd.read_csv(args.feature_file)
     elif args.model_name == "transformer_encoder":
@@ -148,10 +134,12 @@ def main(argv: list[str] | None = None) -> None:
             calendar,
             signal_date,
             lookback=int(getattr(model, "lookback", config.get("dataset", {}).get("lookback", 20))),
-            universe_mode=str(config.get("data", {}).get("universe_mode", "official")),
+            universe_mode=str(data_config.get("universe_mode", "official")),
             feature_windows=tuple(config.get("features", {}).get("lookback_windows", [5, 10, 20])),
             news_generator=news_gen,
             stock_news_generator=stock_news_gen,
+            exclude_st=bool(data_config.get("official_universe_exclude_st", True)),
+            exclude_bse=bool(data_config.get("official_universe_exclude_bse", True)),
         )
     else:
         features = build_latest_feature_frame(
@@ -159,9 +147,11 @@ def main(argv: list[str] | None = None) -> None:
             calendar,
             signal_date,
             lookback=int(config.get("dataset", {}).get("lookback", 20)),
-            universe_mode=str(config.get("data", {}).get("universe_mode", "official")),
+            universe_mode=str(data_config.get("universe_mode", "official")),
             news_generator=news_gen,
             stock_news_generator=stock_news_gen,
+            exclude_st=bool(data_config.get("official_universe_exclude_st", True)),
+            exclude_bse=bool(data_config.get("official_universe_exclude_bse", True)),
         )
     signal = generate_daily_signal(features, model, preprocessor, signal_date, next_trade_date)
     save_signal(signal, config["outputs"]["root"], signal_date)
