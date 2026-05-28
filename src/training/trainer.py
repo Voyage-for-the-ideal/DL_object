@@ -20,6 +20,7 @@ from src.models.base import BaseAlphaModel, format_predictions
 from src.models.factory import create_model
 from src.models.linear import create_linear_model
 from src.training.callbacks import EarlyStopping
+from src.training.losses import get_torch_loss, get_torch_optimizer, get_torch_scheduler
 from src.utils.io import ensure_dir, save_yaml
 from src.utils.seed import set_global_seed
 
@@ -168,11 +169,29 @@ def _fit_torch_tabular_with_log(
     device = getattr(model, "device", torch.device("cpu"))
     epochs = int(training_config.get("epochs", 50))
     batch_size = int(training_config.get("batch_size", 1024))
-    learning_rate = float(training_config.get("learning_rate", 0.001))
-    weight_decay = float(training_config.get("weight_decay", 0.0))
-    patience = int(training_config.get("early_stopping_patience", 5))
-    optimizer = torch.optim.Adam(torch_model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    criterion = torch.nn.MSELoss()
+    patience = int(training_config.get("early_stopping_patience", 10))
+    base_lr = float(training_config.get("learning_rate", 0.0003))
+
+    optimizer = get_torch_optimizer(
+        training_config.get("optimizer", "adamw"),
+        torch_model.parameters(),
+        **training_config,
+    )
+    criterion = get_torch_loss(
+        training_config.get("loss", "huber"),
+        **training_config,
+    )
+    scheduler = get_torch_scheduler(
+        training_config.get("scheduler"),
+        optimizer,
+        **training_config,
+    )
+
+    warmup_epochs = int(training_config.get("warmup_epochs", 5))
+    max_grad_norm = float(training_config.get("max_grad_norm", 1.0))
+    early_stop_metric = training_config.get("early_stop_metric", "valid_loss")
+    stopper_mode = "max" if early_stop_metric in ("valid_ic", "valid_rank_ic") else "min"
+    best_metric = float("-inf") if early_stop_metric in ("valid_ic", "valid_rank_ic") else float("inf")
     loader = torch.utils.data.DataLoader(
         torch.utils.data.TensorDataset(
             torch.as_tensor(train_ds.X, dtype=torch.float32),
@@ -189,11 +208,16 @@ def _fit_torch_tabular_with_log(
         batch_size=batch_size,
         shuffle=False,
     )
-    stopper = EarlyStopping(patience=patience)
+    stopper = EarlyStopping(patience=patience, mode=stopper_mode)
     best_state: dict[str, Any] | None = None
     rows: list[dict[str, float | int]] = []
     for epoch in range(1, epochs + 1):
         torch_model.train()
+        # Warmup
+        if warmup_epochs > 0 and epoch <= warmup_epochs:
+            warmup_lr = base_lr * (epoch / warmup_epochs)
+            for param_group in optimizer.param_groups:
+                param_group["lr"] = warmup_lr
         train_losses: list[float] = []
         for xb, yb in loader:
             xb = xb.to(device)
@@ -201,6 +225,8 @@ def _fit_torch_tabular_with_log(
             optimizer.zero_grad()
             loss = criterion(torch_model(xb), yb)
             loss.backward()
+            if max_grad_norm > 0:
+                torch.nn.utils.clip_grad_norm_(torch_model.parameters(), max_grad_norm)
             optimizer.step()
             train_losses.append(float(loss.detach().cpu()))
         torch_model.eval()
@@ -216,13 +242,18 @@ def _fit_torch_tabular_with_log(
         pred = format_predictions(valid_ds.index, valid_scores_gpu.detach().cpu().numpy(), model.model_name)
         pred["label"] = valid_ds.y
         metrics, _, _ = evaluate_predictions(pred)
+        if scheduler is not None:
+            if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                scheduler.step(valid_loss)
+            else:
+                scheduler.step()
         row = {
             "epoch": epoch,
             "train_loss": float(np.mean(train_losses)) if train_losses else float("nan"),
             "valid_loss": valid_loss,
             "valid_ic": metrics.get("ic_mean", float("nan")),
             "valid_rank_ic": metrics.get("rank_ic_mean", float("nan")),
-            "learning_rate": learning_rate,
+            "learning_rate": optimizer.param_groups[0]["lr"],
         }
         rows.append(row)
         epoch_width = max(3, len(str(epochs)))
@@ -235,12 +266,31 @@ def _fit_torch_tabular_with_log(
             f"lr={row['learning_rate']:.6g}",
             flush=True,
         )
-        if stopper.best_value is None or valid_loss < stopper.best_value:
-            best_state = deepcopy(torch_model.state_dict())
-        if stopper.step(valid_loss):
+        if early_stop_metric == "valid_rank_ic":
+            monitor_value = row.get("valid_rank_ic", row["valid_ic"])
+        elif early_stop_metric == "valid_ic":
+            monitor_value = row["valid_ic"]
+        else:
+            monitor_value = row["valid_loss"]
+
+        is_best = False
+        if early_stop_metric == "valid_rank_ic":
+            is_best = row.get("valid_rank_ic", -999) > best_metric
+            best_metric = max(best_metric, row.get("valid_rank_ic", -999))
+        elif early_stop_metric == "valid_ic":
+            is_best = row["valid_ic"] > best_metric
+            best_metric = max(best_metric, row["valid_ic"])
+        else:
+            is_best = valid_loss < best_metric
+            best_metric = min(best_metric, valid_loss)
+
+        if is_best:
+            best_state = {k: v.cpu().clone() for k, v in torch_model.state_dict().items()}
+
+        if stopper.step(monitor_value):
             print(
                 f"early stopping at epoch {epoch} | "
-                f"best_valid_loss={stopper.best_value:.6f} | patience={patience}",
+                f"best_{early_stop_metric}={stopper.best_value:.6f} | patience={patience}",
                 flush=True,
             )
             break
