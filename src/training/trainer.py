@@ -102,7 +102,7 @@ def train_tabular_model(
         if model_name == "transformer_encoder":
             params["lookback"] = lookback
         model = create_model(model_name, input_dim=len(feature_columns), **params)
-    if model_name in {"mlp", "transformer_encoder"} and hasattr(model, "model"):
+    if model_name in {"mlp", "transformer_encoder", "ft_transformer"} and hasattr(model, "model"):
         log = _fit_torch_tabular_with_log(model, train_ds, valid_ds, training_config)
     else:
         model.fit(train_ds.X, train_ds.y, **training_config)

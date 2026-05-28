@@ -17,6 +17,7 @@ def _create_estimator(
     learning_rate: float = 0.05,
     n_estimators: int = 200,
     max_iter: int = 100,
+    max_depth: int = 6,
     random_state: int | None = 42,
 ) -> tuple[Any, str]:
     try:
@@ -26,6 +27,7 @@ def _create_estimator(
             HistGradientBoostingRegressor(
                 max_iter=max_iter,
                 learning_rate=learning_rate,
+                max_depth=max_depth,
                 random_state=random_state,
             ),
             "hist_gradient_boosting",
@@ -34,6 +36,7 @@ def _create_estimator(
         LGBMRegressor(
             n_estimators=n_estimators,
             learning_rate=learning_rate,
+            max_depth=max_depth,
             random_state=random_state,
         ),
         "lightgbm",
@@ -48,7 +51,9 @@ class GbdtRegressorModel(BaseAlphaModel):
         learning_rate: float = 0.05,
         n_estimators: int = 200,
         max_iter: int = 100,
+        max_depth: int = 6,
         random_state: int | None = 42,
+        **kwargs: Any,
     ) -> None:
         if estimator is None:
             estimator, fallback_name = _create_estimator(

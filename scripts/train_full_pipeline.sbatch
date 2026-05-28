@@ -89,7 +89,7 @@ python train.py \
     --train-panel "$PANEL_DIR/train_panel.csv" \
     --valid-panel "$PANEL_DIR/valid_panel.csv" \
     --label-experiment \
-    --label-types label_5d label_5d_vol_norm label_5d_cs_rank label_5d_excess \
+    --label-types label_5d label_5d_vol_norm label_5d_cs_rank \
     --label-models gbdt ft_transformer \
     2>&1 | tee "$LOG_DIR/${TIMESTAMP}_label_experiment.log"
 
