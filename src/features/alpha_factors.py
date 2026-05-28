@@ -82,21 +82,14 @@ def build_alpha_factors(
         price[f"downside_vol_{w}d"] = neg.groupby(grp).transform(
             lambda x: x.rolling(w, min_periods=max(3, w // 2)).std()
         )
-        # Max drawdown
-        cumret = (1 + price["ret_1d"].fillna(0)).groupby(grp)
-        rolling_max = cumret.transform(
-            lambda x: x.rolling(w, min_periods=max(3, w // 2))
-            .cumprod()
-            .rolling(w, min_periods=max(3, w // 2))
-            .max()
+    # Cumulative return for max drawdown
+    price["cumret"] = (1 + price["ret_1d"].fillna(0)).groupby(grp).cumprod()
+    # Max drawdown
+    for w in windows:
+        rolling_max = price.groupby(TS_CODE)["cumret"].transform(
+            lambda x: x.rolling(w, min_periods=max(3, w // 2)).max()
         )
-        price[f"max_dd_{w}d"] = (
-            _safe_divide(
-                rolling_max,
-                cumret.transform(lambda x: x.rolling(w, min_periods=max(3, w // 2)).cumprod()),
-            )
-            - 1
-        )
+        price[f"max_dd_{w}d"] = _safe_divide(rolling_max, price["cumret"]) - 1
 
     # Volume-price correlation
     for w in windows:
@@ -185,8 +178,8 @@ def build_alpha_factors(
 
         # Net flows per order size level
         for level in ["sm", "md", "lg", "elg"]:
-            buy_vol = pd.to_numeric(mf.get(f"buy_{level}_vol", 0), errors="coerce").fillna(0)
-            sell_vol = pd.to_numeric(mf.get(f"sell_{level}_vol", 0), errors="coerce").fillna(0)
+            buy_vol = pd.to_numeric(mf.get(f"buy_{level}_vol", pd.Series(dtype=float)), errors="coerce").fillna(0)
+            sell_vol = pd.to_numeric(mf.get(f"sell_{level}_vol", pd.Series(dtype=float)), errors="coerce").fillna(0)
             total = (buy_vol + sell_vol).replace(0, np.nan)
             mf[f"mf_{level}_net_vol"] = buy_vol - sell_vol
             mf[f"mf_{level}_imbalance"] = (buy_vol - sell_vol) / total
@@ -246,7 +239,8 @@ def build_alpha_factors(
         cs_features.append(cs_frame)
 
     # ---- 5. Momentum/reversal hybrids ----
-    ret_cols = [c for c in price.columns if c.startswith("ret_") and c.endswith("d")]
+    import re
+    ret_cols = [c for c in price.columns if re.match(r"^ret_\d+d$", c)]
     hybrid_features: list[pd.DataFrame] = []
     for i, c1 in enumerate(ret_cols):
         for c2 in ret_cols[i + 1 :]:

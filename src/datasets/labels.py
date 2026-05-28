@@ -26,6 +26,7 @@ def add_forward_return_labels(
     for horizon in horizons:
         sell_close = grouped.shift(-(horizon + 1))
         frame[f"label_{horizon}d"] = sell_close / buy_close - 1
+    extra_5d_cols = []
     if 5 in horizons:
         ret = frame.groupby(TS_CODE, group_keys=False)["close"].pct_change()
         vol_20d = ret.groupby(frame[TS_CODE]).transform(
@@ -33,6 +34,7 @@ def add_forward_return_labels(
         ).clip(lower=1e-6)
         frame["label_5d_vol_norm"] = frame["label_5d"] / vol_20d
         frame["label_5d_cs_rank"] = frame.groupby(TRADE_DATE)["label_5d"].rank(pct=True)
+        extra_5d_cols = ["label_5d_vol_norm", "label_5d_cs_rank"]
         if market_df is not None and not market_df.empty:
             mkt = market_df.copy()
             mkt = normalize_trade_date_column(mkt)
@@ -42,11 +44,12 @@ def add_forward_return_labels(
             mkt_map = mkt.set_index(TRADE_DATE)["mkt_ret_5d"].to_dict()
             frame["label_5d_excess"] = frame["label_5d"].values - frame[TRADE_DATE].map(mkt_map).values
             frame["label_5d_excess"] = frame["label_5d_excess"].astype(float)
+            extra_5d_cols.append("label_5d_excess")
     label_cols = [
         TRADE_DATE,
         TS_CODE,
         *[f"label_{h}d" for h in horizons],
-        *(["label_5d_vol_norm", "label_5d_cs_rank", "label_5d_excess"] if 5 in horizons else []),
+        *extra_5d_cols,
     ]
     labels = frame[label_cols].replace(
         [np.inf, -np.inf], np.nan
