@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from src.models.base import BaseAlphaModel
+from src.models.ft_transformer import FTTransformerAlphaModel
 from src.models.gbdt import GbdtRegressorModel
 from src.models.linear import SklearnRegressorModel, create_linear_model
 from src.models.mlp import TorchMLPAlphaModel
@@ -21,6 +22,8 @@ def load_model_artifact(path: str | Path, model_name: str) -> BaseAlphaModel:
         return TorchMLPAlphaModel.load(path)
     if model_name == "transformer_encoder":
         return TorchTransformerAlphaModel.load(path)
+    if model_name == "ft_transformer":
+        return FTTransformerAlphaModel.load(path)
     raise ValueError(f"Unsupported model artifact type: {model_name}")
 
 
@@ -45,6 +48,17 @@ def create_model(name: str, input_dim: int, **kwargs: Any) -> BaseAlphaModel:
             num_heads=int(kwargs.get("num_heads", 4)),
             dropout=float(kwargs.get("dropout", 0.1)),
             lookback=int(kwargs.get("lookback", 20)),
+            device=str(kwargs.get("device", "cpu")),
+        )
+    if name == "ft_transformer":
+        return FTTransformerAlphaModel(
+            n_features=input_dim,
+            d_token=int(kwargs.get("d_token", 128)),
+            n_blocks=int(kwargs.get("n_blocks", 4)),
+            n_heads=int(kwargs.get("n_heads", 8)),
+            ffn_ratio=int(kwargs.get("ffn_ratio", 2)),
+            dropout=float(kwargs.get("dropout", 0.2)),
+            drop_path=float(kwargs.get("drop_path", 0.1)),
             device=str(kwargs.get("device", "cpu")),
         )
     raise ValueError(f"Unsupported model: {name}")

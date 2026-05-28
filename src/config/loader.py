@@ -87,7 +87,7 @@ def validate_config(config: Config) -> None:
     if universe_mode not in {"hs300", "official", "all"}:
         raise ValueError(f"Unsupported universe_mode: {universe_mode!r}")
     model_name = config.get("model", {}).get("name")
-    allowed_models = {"ridge", "elasticnet", "lightgbm", "gbdt", "mlp", "transformer_encoder"}
+    allowed_models = {"ridge", "elasticnet", "lightgbm", "gbdt", "mlp", "transformer_encoder", "ft_transformer"}
     if model_name not in allowed_models:
         raise ValueError(f"Unsupported model.name: {model_name!r}")
     if not config.get("outputs", {}).get("root"):
