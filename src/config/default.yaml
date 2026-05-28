@@ -19,6 +19,8 @@ features:
   use_price: true
   use_metric: true
   use_moneyflow: true
+  use_alpha_factors: true
+  alpha_windows: [5, 10, 20]
   use_news_finbert: false
   news_finbert_model: "yiyanghkust/finbert-tone-chinese"
   news_finbert_svd_dim: 16

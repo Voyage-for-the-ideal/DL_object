@@ -35,6 +35,8 @@ def build_feature_panel(
     stock_news_generator: "StockNewsFeatureGenerator | None" = None,
     exclude_st: bool = True,
     exclude_bse: bool = True,
+    use_alpha_factors: bool = False,
+    basic: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Build a merged feature panel for supplied signal dates."""
     daily_dates = _progress(trade_dates, "load daily", show_progress)
@@ -52,6 +54,18 @@ def build_feature_panel(
         build_metric_features(metric),
         build_moneyflow_features(moneyflow, windows=windows),
     ]
+    if use_alpha_factors:
+        from src.features.alpha_factors import build_alpha_factors
+        if basic is None:
+            basic = loader.load_basic()
+        alpha_features = build_alpha_factors(
+            daily=daily,
+            metric=metric,
+            moneyflow=moneyflow,
+            basic=basic,
+            windows=tuple(w for w in windows if w <= 20),
+        )
+        feature_frames.append(alpha_features)
     if news_generator is not None or stock_news_generator is not None:
         from src.data.news_features import aggregate_news_titles, aggregate_stock_news
         from src.data.stock_news_extractor import (
