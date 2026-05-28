@@ -1,3 +1,5 @@
+# A-share cross-sectional ranking prediction — default configuration
+
 data:
   root: "A股数据"
   start_date: "2016-01-04"
@@ -9,10 +11,8 @@ data:
   official_universe_exclude_bse: true
 
 label:
-  main: "label_5d"
-  # main: "label_5d_vol_norm" # 波动率标准化
-  # main: "label_5d_cs_rank"  # cross-sectional rank
-  horizons: [1, 3, 5]
+  main: "label_5d_cs_rank"
+  horizons: [5]
 
 features:
   lookback_windows: [5, 10, 20, 60]
@@ -22,10 +22,11 @@ features:
   use_alpha_factors: true
   alpha_windows: [5, 10, 20]
   use_news_finbert: false
+  use_stock_news: false
+  use_news_sentiment: false
   news_finbert_model: "yiyanghkust/finbert-tone-chinese"
   news_finbert_svd_dim: 16
   news_cutoff_time: null
-  use_stock_news: false
   stock_news_tfidf_max_features: 256
   stock_news_svd_dim: 16
 
@@ -38,19 +39,19 @@ preprocess:
   scale_method: "train_standard"
 
 dataset:
-  type: "window"
+  type: "tabular"
   lookback: 20
   min_history_days: 20
 
 model:
-  name: "mlp"
+  name: "ft_transformer"
   task: "regression"
   input_dim: null
+  device: "cuda"
   hidden_dim: 128
   dropout: 0.3
   num_layers: 2
   num_heads: 4
-  device: "cpu"
   ridge:
     alpha: 10.0
   elasticnet:
@@ -58,9 +59,9 @@ model:
     l1_ratio: 0.5
     max_iter: 20000
   gbdt:
-    learning_rate: 0.03
-    n_estimators: 600
-    max_iter: 600
+    learning_rate: 0.05
+    n_estimators: 500
+    max_depth: 6
     random_state: 42
   ft_transformer:
     d_token: 128
@@ -74,11 +75,23 @@ training:
   seed: 42
   batch_size: 4096
   epochs: 100
-  learning_rate: 0.0005
-  weight_decay: 0.0001
-  loss: "mse"
+  learning_rate: 0.0003
+  weight_decay: 0.001
+  loss: "huber"
+  huber_delta: 1.0
+  optimizer: "adamw"
+  scheduler: "cosine_restart"
+  scheduler_t0: 10
+  warmup_epochs: 5
+  max_grad_norm: 1.0
+  early_stop_metric: "valid_rank_ic"
   early_stopping_patience: 10
-  device: "cpu"
+  device: "cuda"
+
+ensemble:
+  gbdt_weight: 0.50
+  ft_transformer_weight: 0.30
+  news_weight: 0.20
 
 backtest:
   initial_cash: 1000000
@@ -98,8 +111,8 @@ strategy:
   top_k: 20
   max_single_weight: 0.10
   max_industry_weight: 0.30
-  max_turnover: null
-  min_amount: 0
+  max_turnover: 0.50
+  min_amount: 10000000
 
 outputs:
   root: "outputs"
