@@ -14,6 +14,7 @@ from src.data.schema import TRADE_DATE, TS_CODE, normalize_trade_date
 class UniverseBuilder:
     loader: CsvDataLoader
     min_amount: float = 0.0
+    min_amount_pct: float = 0.0
     exclude_st: bool = True
     exclude_bse: bool = True
 
@@ -70,5 +71,8 @@ class UniverseBuilder:
         frame = daily[daily[TS_CODE].astype(str).isin(universe)].copy()
         vol = pd.to_numeric(frame.get("vol", 0), errors="coerce").fillna(0)
         amount = pd.to_numeric(frame.get("amount", 0), errors="coerce").fillna(0)
-        tradable = frame[(vol > 0) & (amount >= self.min_amount)]
-        return set(tradable[TS_CODE].astype(str))
+        frame = frame[(vol > 0) & (amount >= self.min_amount)]
+        if self.min_amount_pct > 0 and len(frame) > 0:
+            threshold = frame["amount"].quantile(self.min_amount_pct)
+            frame = frame[frame["amount"] >= threshold]
+        return set(frame[TS_CODE].astype(str))

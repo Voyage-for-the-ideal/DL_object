@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,8 +37,12 @@ def run_label_comparison(
     results: list[LabelExperimentResult] = []
     config = dict(config)
 
+    # 将 PyTorch 模型排在前面，避免 GBDT 先占满 GPU 导致 PyTorch OOM
+    _pytorch_models = {"ft_transformer", "mlp", "transformer_encoder"}
+    ordered_models = sorted(model_names, key=lambda m: (m not in _pytorch_models, m))
+
     for label_type in label_types:
-        for model_name in model_names:
+        for model_name in ordered_models:
             run_name = f"{model_name}_{label_type}"
             print(f"\n{'='*60}\n  Running: {run_name}\n{'='*60}")
 
@@ -72,6 +77,15 @@ def run_label_comparison(
                     metrics={"error": str(e)},
                 )
             results.append(result)
+
+            # 释放 GPU 内存，防止后续训练 OOM
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
+            gc.collect()
 
     # Save comparison table
     table = pd.DataFrame([

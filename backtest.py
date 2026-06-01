@@ -85,6 +85,7 @@ def run_backtest(
         universe_mode=str(data_config.get("universe_mode", "official")),
         windows=feature_windows,
         min_amount=float(config.get("strategy", {}).get("min_amount", 0)),
+        min_amount_pct=float(config.get("strategy", {}).get("min_amount_pct", 0)),
         show_progress=show_progress,
         news_generator=news_generator,
         stock_news_generator=stock_news_generator,

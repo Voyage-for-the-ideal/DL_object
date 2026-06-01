@@ -131,6 +131,11 @@ def compute_ensemble_weights_from_dir(
     for name in model_names:
         csv_path = Path(predictions_dir) / name / "valid_predictions.csv"
         if csv_path.exists():
-            preds[name] = pd.read_csv(csv_path)
+            df = pd.read_csv(csv_path)
+            if label_column not in df.columns:
+                label_cols = [c for c in df.columns if c.startswith("label_")]
+                if label_cols:
+                    label_column = label_cols[0]
+            preds[name] = df
     ensemble.compute_icir_weights(preds, label_column=label_column)
     return ensemble

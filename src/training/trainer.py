@@ -181,10 +181,11 @@ def _fit_torch_tabular_with_log(
         training_config.get("loss", "huber"),
         **training_config,
     )
+    scheduler_kwargs = {k: v for k, v in training_config.items() if k != "optimizer"}
     scheduler = get_torch_scheduler(
         training_config.get("scheduler"),
         optimizer,
-        **training_config,
+        **scheduler_kwargs,
     )
 
     warmup_epochs = int(training_config.get("warmup_epochs", 5))

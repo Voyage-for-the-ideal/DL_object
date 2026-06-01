@@ -1,4 +1,4 @@
-"""Small raw-data feature pipeline used by smoke tests and daily prediction."""
+"""Small raw-data feature pipeline used by daily prediction."""
 
 from __future__ import annotations
 
@@ -30,6 +30,7 @@ def build_feature_panel(
     universe_mode: str = "official",
     windows: tuple[int, ...] = (5, 10, 20),
     min_amount: float = 0.0,
+    min_amount_pct: float = 0.0,
     show_progress: bool = False,
     news_generator: "NewsFinbertFeatureGenerator | None" = None,
     stock_news_generator: "StockNewsFeatureGenerator | None" = None,
@@ -114,7 +115,7 @@ def build_feature_panel(
     panel = merge_feature_frames(feature_frames)
     if panel.empty:
         return panel
-    universe = UniverseBuilder(loader, min_amount=min_amount, exclude_st=exclude_st, exclude_bse=exclude_bse)
+    universe = UniverseBuilder(loader, min_amount=min_amount, min_amount_pct=min_amount_pct, exclude_st=exclude_st, exclude_bse=exclude_bse)
     allowed_rows: list[pd.DataFrame] = []
     grouped = list(panel.groupby(TRADE_DATE))
     for trade_date, group in _progress(grouped, "filter universe", show_progress):
@@ -129,6 +130,8 @@ def build_latest_feature_frame(
     signal_date: str,
     lookback: int,
     universe_mode: str = "official",
+    min_amount: float = 0.0,
+    min_amount_pct: float = 0.0,
     news_generator: "NewsFinbertFeatureGenerator | None" = None,
     stock_news_generator: "StockNewsFeatureGenerator | None" = None,
     exclude_st: bool = True,
@@ -137,6 +140,8 @@ def build_latest_feature_frame(
     """Build only the latest signal-date rows, reading no future daily files."""
     panel = build_recent_feature_frame(
         loader, calendar, signal_date, lookback, universe_mode,
+        min_amount=min_amount,
+        min_amount_pct=min_amount_pct,
         news_generator=news_generator,
         stock_news_generator=stock_news_generator,
         exclude_st=exclude_st,
@@ -152,6 +157,8 @@ def build_recent_feature_frame(
     lookback: int,
     universe_mode: str = "official",
     feature_windows: tuple[int, ...] = (5, 10, 20),
+    min_amount: float = 0.0,
+    min_amount_pct: float = 0.0,
     news_generator: "NewsFinbertFeatureGenerator | None" = None,
     stock_news_generator: "StockNewsFeatureGenerator | None" = None,
     exclude_st: bool = True,
@@ -164,6 +171,8 @@ def build_recent_feature_frame(
     dates = all_dates[-date_count:] if lookback > 0 else [signal_date]
     panel = build_feature_panel(
         loader, dates, universe_mode=universe_mode, windows=feature_windows,
+        min_amount=min_amount,
+        min_amount_pct=min_amount_pct,
         news_generator=news_generator,
         stock_news_generator=stock_news_generator,
         exclude_st=exclude_st,

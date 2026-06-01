@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import json
 from pathlib import Path
 from typing import Any
@@ -62,6 +63,16 @@ def gbdt_select_and_train_ftt(
         train_frame, valid_frame, gbdt_config, gbdt_dir, label_column=label_col
     )
     gbdt_metrics = gbdt_result.get("metrics", {})
+
+    # 释放 GBDT 训练占用的 GPU 内存
+    del gbdt_result
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
+    gc.collect()
 
     # Step 2: Load GBDT and extract importance
     print(f"[GBDT Selector] Step 2: Selecting top-{top_k} features...")

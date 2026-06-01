@@ -174,7 +174,7 @@ class FTTransformerAlphaModel(BaseAlphaModel):
         drop_path: float = 0.1,
         device: str = "cpu",
     ):
-        self._model = FTTransformer(
+        self.model = FTTransformer(
             n_features=n_features,
             d_token=d_token,
             n_blocks=n_blocks,
@@ -183,32 +183,32 @@ class FTTransformerAlphaModel(BaseAlphaModel):
             dropout=dropout,
             drop_path=drop_path,
         )
-        self._device = device
-        self._model.to(device)
+        self.device = device
+        self.model_name = "ft_transformer"
+        self.model.to(device)
         self._model_kwargs = {
             "n_features": n_features, "d_token": d_token,
             "n_blocks": n_blocks, "n_heads": n_heads, "ffn_ratio": ffn_ratio,
             "dropout": dropout, "drop_path": drop_path,
         }
 
-    @property
-    def torch_model(self) -> nn.Module:
-        return self._model
-
     def fit(self, X: np.ndarray, y: np.ndarray, **kwargs: Any) -> None:
         raise NotImplementedError("Use train_tabular_model() instead")
 
-    def predict_array(self, X: np.ndarray) -> np.ndarray:
-        self._model.eval()
+    def predict_array(self, X: np.ndarray, batch_size: int = 4096) -> np.ndarray:
+        self.model.eval()
+        scores: list[np.ndarray] = []
         with torch.no_grad():
-            x_tensor = torch.as_tensor(X, dtype=torch.float32, device=self._device)
-            return self._model(x_tensor).cpu().numpy()
+            for start in range(0, len(X), batch_size):
+                batch = torch.as_tensor(X[start : start + batch_size], dtype=torch.float32, device=self.device)
+                scores.append(self.model(batch).detach().cpu().numpy())
+        return np.concatenate(scores)
 
     def save(self, path: str | Path) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(
-            {"model_state_dict": self._model.state_dict(), "kwargs": self._model_kwargs},
+            {"model_state_dict": self.model.state_dict(), "kwargs": self._model_kwargs},
             path,
         )
 
@@ -217,6 +217,6 @@ class FTTransformerAlphaModel(BaseAlphaModel):
         checkpoint = torch.load(path, map_location="cpu", weights_only=False)
         kwargs = checkpoint["kwargs"]
         instance = cls(**kwargs)
-        instance._model.load_state_dict(checkpoint["model_state_dict"])
-        instance._model.to(instance._device)
+        instance.model.load_state_dict(checkpoint["model_state_dict"])
+        instance.model.to(instance.device)
         return instance

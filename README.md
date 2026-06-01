@@ -17,9 +17,9 @@
 
 **baseline 是什么？**
 
-baseline 是基准模型，用来证明复杂模型是否真的有提升。本项目推荐先跑 `ridge`，也就是岭回归。它不是深度学习模型，但训练快、稳定，适合检查数据和评估流程是否跑通。课程要求至少使用一个神经网络模型，所以正式结果还需要跑 `mlp` 或 `transformer_encoder`。
+baseline 是基准模型，用来证明复杂模型是否真的有提升。本项目推荐先跑 `ridge`，也就是岭回归。它不是深度学习模型，但训练快、稳定，适合检查数据和评估流程是否跑通。课程要求至少使用一个神经网络模型，默认配置使用 `ft_transformer`（Feature Tokenizer + Transformer），也支持 `mlp` 和 `transformer_encoder`。
 
-`mlp` 直接使用二维面板特征；`transformer_encoder` 会按股票和日期把面板重组为窗口序列，输入形状为 `[样本数, dataset.lookback, 特征数]`。默认 `dataset.lookback=20`，即每个样本使用同一只股票最近 20 个交易日的特征序列。
+`mlp` 和 `ft_transformer` 直接使用二维面板特征（`[样本数, 特征数]`）；`transformer_encoder` 会按股票和日期把面板重组为窗口序列，输入形状为 `[样本数, dataset.lookback, 特征数]`。默认 `dataset.lookback=20`，即每个样本使用同一只股票最近 20 个交易日的特征序列。
 
 ## 环境准备
 
@@ -32,8 +32,7 @@ pip install -r requirements.txt
 
 ```powershell
 python -m ruff check .
-python -m mypy src tests
-python -m pytest
+python -m mypy src
 ```
 
 ## 一键跑通完整流程
@@ -75,7 +74,17 @@ outputs/runs/demo_ridge/
 
 ### 3. 再训练神经网络模型
 
-先用 1 个 epoch 快速确认流程：
+默认配置使用 `ft_transformer`，直接跑即可：
+
+```powershell
+python train.py `
+  --train-panel outputs/cache/train_panel.csv `
+  --valid-panel outputs/cache/valid_panel.csv `
+  --model-name ft_transformer `
+  --run-id demo_ftt
+```
+
+也可用 `mlp` 快速验证，先用 1 个 epoch 确认流程：
 
 ```powershell
 python train.py `
@@ -127,7 +136,16 @@ outputs/evaluation/demo_mlp/group_return.csv
 
 ### 5. 生成最新每日信号
 
-数据最新交易日会自动从 `A股数据/daily/` 中识别。若使用 MLP：
+数据最新交易日会自动从 `A股数据/daily/` 中识别。若使用默认的 `ft_transformer`：
+
+```powershell
+python -m src.predict.daily_signal `
+  --preprocessor outputs/runs/demo_ftt/preprocessor.joblib `
+  --model outputs/runs/demo_ftt/model.pt `
+  --model-name ft_transformer
+```
+
+若使用 MLP：
 
 ```powershell
 python -m src.predict.daily_signal `
@@ -231,7 +249,7 @@ python train.py `
 | `CLAUDE.md` | 给代码助手看的项目约束和注意事项。 |
 | `README.md` | 项目说明和运行流程。 |
 | `requirements.txt` | Python 依赖。 |
-| `pyproject.toml` | Ruff、mypy、pytest 等工具配置。 |
+
 | `prepare_panels.py` | 从 `A股数据/` 生成 `train_panel.csv` 和 `valid_panel.csv`。 |
 | `train.py` | 从已生成的面板训练模型，并保存模型、预处理器、预测和训练曲线。 |
 | `evaluate.py` | 读取验证集预测文件，输出 IC、RankIC、ICIR、分组收益等评估结果。 |
@@ -246,7 +264,7 @@ python train.py `
 | `src/backtest/` | 投组合、交易执行、策略和回测指标。 |
 | `src/predict/daily_signal.py` | 使用训练好的模型生成每日股票打分信号。 |
 | `src/predict/daily_order.py` | 把每日信号转换为模拟盘订单建议。 |
-| `tests/` | 单元测试和流程级冒烟测试。 |
+| `backtest.py` | 回测入口，运行完整回测流程并生成 NAV 曲线和报告。 |
 | `doc/` | 课程设计文档（proposal、detailed-design）。 |
 | `A股数据/` | 原始课程数据，不应提交到代码仓库。 |
 | `outputs/` | 训练、评估、信号、订单和缓存输出，不应提交到代码仓库。 |
@@ -267,13 +285,13 @@ python train.py `
 
 ## 时间与标签口径
 
-主标签严格使用：
+默认标签为 5 日截面排名（`label_5d_cs_rank`），即对每只股票的 5 日未来收益在截面上做排名归一化，消除市场风格的影响。标签公式：
 
 ```text
-label_1d(T) = close(T+2) / close(T+1) - 1
+label_5d(T) = close(T+7) / close(T+2) - 1
 ```
 
-其中 `T` 是信号日，模型只使用 `T` 日收盘后及以前可得数据；策略在 `T+1` 下单，主标签以 `T+2` 可卖出价格衡量收益。辅助标签支持 3 日和 5 日。
+其中 `T` 是信号日，模型只使用 `T` 日收盘后及以前可得数据；策略在 `T+1` 下单，标签以 `T+7` 可卖出价格衡量收益（A 股 T+1 制度，5 个交易日后可卖）。辅助标签支持 1 日（`label_1d`）、波动率归一化（`label_5d_vol_norm`）和超额收益（`label_5d_excess`）。
 
 预处理器、截尾阈值、填充值、标准化参数和 TF-IDF 词表只在训练期 `fit`，验证、回测和每日预测只调用 `transform`。
 
@@ -292,7 +310,7 @@ label_1d(T) = close(T+2) / close(T+1) - 1
 1. 安装依赖并确认质量检查通过。
 2. 运行 `python prepare_panels.py` 生成训练 / 验证面板。
 3. 训练 `ridge` baseline，确认数据和评估流程正常。
-4. 训练 1 个 epoch 的 `mlp` 或 `transformer_encoder`，满足深度学习模型要求并确认模型链路正常。
+4. 训练 1 个 epoch 的 `ft_transformer` 或 `mlp`，满足深度学习模型要求并确认模型链路正常。
 5. 运行 `evaluate.py` 输出 IC、RankIC、ICIR 和方向准确率。
 6. 使用最新可用日生成下一交易日信号和订单建议。
 

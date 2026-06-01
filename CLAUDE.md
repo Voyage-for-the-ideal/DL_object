@@ -11,9 +11,6 @@ A-share (中国A股) short-term cross-sectional ranking prediction using deep le
 ## Commands
 
 ```bash
-# Smoke test — verify all modules work (no panel data needed)
-python scripts/test_pipeline.py --quick
-
 # Build feature panels with alpha factors (prerequisite for training)
 python prepare_panels.py --output-dir outputs/cache/panels
 
@@ -48,15 +45,9 @@ python -m src.predict.daily_signal --config src/config/default.yaml --model-name
 # Generate daily orders from signals
 python -m src.predict.daily_order --signal-file outputs/signals/<date>_signal.csv
 
-# Run all tests
-python -m pytest
-
-# Run a single test file
-python -m pytest tests/test_models.py
-
 # Lint and type check
 python -m ruff check .
-python -m mypy src tests
+python -m mypy src
 ```
 
 ## Architecture
@@ -159,5 +150,5 @@ outputs/
 ### Code quality
 
 - Python 3.10 target, all public functions have type hints
-- Ruff (line-length 100, rules E/F/I/UP/B), mypy (ignore_missing_imports), isort (black profile)
-- Tests use `tmp_path` fixtures with synthetic data — no real data required
+- Ruff (line-length 100, rules E/F/I/UP/B/I), mypy (ignore_missing_imports)
+

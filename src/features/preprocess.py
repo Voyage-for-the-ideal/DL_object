@@ -54,8 +54,7 @@ class TrainOnlyPreprocessor:
             data = data.fillna(self.medians)
         if self.scale:
             data = (data - self.means) / self.stds
-        for column in self.feature_columns:
-            result[column] = data[column]
+        result[self.feature_columns] = data[self.feature_columns]
         return result
 
     def fit_transform(

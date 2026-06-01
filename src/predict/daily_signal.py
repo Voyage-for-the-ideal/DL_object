@@ -129,6 +129,7 @@ def main(argv: list[str] | None = None) -> None:
 
         stock_news_gen = StockNewsFeatureGenerator.load(stock_gen_path)
 
+    strategy_config = config.get("strategy", {})
     data_config = config.get("data", {})
     if args.feature_file:
         features = pd.read_csv(args.feature_file)
@@ -140,6 +141,8 @@ def main(argv: list[str] | None = None) -> None:
             lookback=int(getattr(model, "lookback", config.get("dataset", {}).get("lookback", 20))),
             universe_mode=str(data_config.get("universe_mode", "official")),
             feature_windows=tuple(config.get("features", {}).get("lookback_windows", [5, 10, 20])),
+            min_amount=float(strategy_config.get("min_amount", 0)),
+            min_amount_pct=float(strategy_config.get("min_amount_pct", 0)),
             news_generator=news_gen,
             stock_news_generator=stock_news_gen,
             exclude_st=bool(data_config.get("official_universe_exclude_st", True)),
@@ -152,6 +155,8 @@ def main(argv: list[str] | None = None) -> None:
             signal_date,
             lookback=int(config.get("dataset", {}).get("lookback", 20)),
             universe_mode=str(data_config.get("universe_mode", "official")),
+            min_amount=float(strategy_config.get("min_amount", 0)),
+            min_amount_pct=float(strategy_config.get("min_amount_pct", 0)),
             news_generator=news_gen,
             stock_news_generator=stock_news_gen,
             exclude_st=bool(data_config.get("official_universe_exclude_st", True)),

@@ -122,6 +122,7 @@ def main() -> None:
         universe_mode=str(config["data"].get("universe_mode", "official")),
         windows=tuple(features_config.get("lookback_windows", [5, 10, 20])),
         min_amount=float(config.get("strategy", {}).get("min_amount", 0)),
+        min_amount_pct=float(config.get("strategy", {}).get("min_amount_pct", 0)),
         show_progress=True,
         news_generator=news_gen,
         stock_news_generator=stock_news_gen,

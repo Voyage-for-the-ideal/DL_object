@@ -15,7 +15,7 @@ outputs/
 __pycache__/
 *.py[cod]
 *$py.class
-.pytest_cache/
+
 .mypy_cache/
 .ruff_cache/
 .coverage
@@ -31,7 +31,7 @@ env/
 
 # Local logs and temporary files
 *.log
-.tmp_pytest/
+
 tmp/
 temp/
 *.tmp

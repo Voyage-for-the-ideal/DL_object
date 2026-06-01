@@ -51,14 +51,19 @@ def create_model(name: str, input_dim: int, **kwargs: Any) -> BaseAlphaModel:
             device=str(kwargs.get("device", "cpu")),
         )
     if name == "ft_transformer":
+        # Merge nested ft_transformer sub-config so that the YAML
+        #   model.ft_transformer.{d_token,n_blocks,...}  takes effect.
+        ftt_kwargs = dict(kwargs)
+        if "ft_transformer" in ftt_kwargs:
+            ftt_kwargs.update(ftt_kwargs.pop("ft_transformer"))
         return FTTransformerAlphaModel(
             n_features=input_dim,
-            d_token=int(kwargs.get("d_token", 128)),
-            n_blocks=int(kwargs.get("n_blocks", 4)),
-            n_heads=int(kwargs.get("n_heads", 8)),
-            ffn_ratio=int(kwargs.get("ffn_ratio", 2)),
-            dropout=float(kwargs.get("dropout", 0.2)),
-            drop_path=float(kwargs.get("drop_path", 0.1)),
-            device=str(kwargs.get("device", "cpu")),
+            d_token=int(ftt_kwargs.get("d_token", 128)),
+            n_blocks=int(ftt_kwargs.get("n_blocks", 4)),
+            n_heads=int(ftt_kwargs.get("n_heads", 8)),
+            ffn_ratio=int(ftt_kwargs.get("ffn_ratio", 2)),
+            dropout=float(ftt_kwargs.get("dropout", 0.2)),
+            drop_path=float(ftt_kwargs.get("drop_path", 0.1)),
+            device=str(ftt_kwargs.get("device", "cpu")),
         )
     raise ValueError(f"Unsupported model: {name}")

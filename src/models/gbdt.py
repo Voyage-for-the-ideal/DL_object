@@ -17,30 +17,28 @@ def _create_estimator(
     learning_rate: float = 0.05,
     n_estimators: int = 200,
     max_iter: int = 100,
-    max_depth: int = 6,
+    max_depth: int | None = None,
     random_state: int | None = 42,
 ) -> tuple[Any, str]:
     try:
         from lightgbm import LGBMRegressor
     except ImportError:
-        return (
-            HistGradientBoostingRegressor(
-                max_iter=max_iter,
-                learning_rate=learning_rate,
-                max_depth=max_depth,
-                random_state=random_state,
-            ),
-            "hist_gradient_boosting",
-        )
-    return (
-        LGBMRegressor(
-            n_estimators=n_estimators,
+        kwargs = dict(
+            max_iter=max_iter,
             learning_rate=learning_rate,
-            max_depth=max_depth,
             random_state=random_state,
-        ),
-        "lightgbm",
+        )
+        if max_depth is not None:
+            kwargs["max_depth"] = max_depth
+        return (HistGradientBoostingRegressor(**kwargs), "hist_gradient_boosting")
+    lgbm_kwargs: dict[str, Any] = dict(
+        n_estimators=n_estimators,
+        learning_rate=learning_rate,
+        random_state=random_state,
     )
+    if max_depth is not None:
+        lgbm_kwargs["max_depth"] = max_depth
+    return (LGBMRegressor(**lgbm_kwargs), "lightgbm")
 
 
 class GbdtRegressorModel(BaseAlphaModel):
@@ -51,15 +49,15 @@ class GbdtRegressorModel(BaseAlphaModel):
         learning_rate: float = 0.05,
         n_estimators: int = 200,
         max_iter: int = 100,
-        max_depth: int = 6,
+        max_depth: int | None = None,
         random_state: int | None = 42,
-        **kwargs: Any,
     ) -> None:
         if estimator is None:
             estimator, fallback_name = _create_estimator(
                 learning_rate=learning_rate,
                 n_estimators=n_estimators,
                 max_iter=max_iter,
+                max_depth=max_depth,
                 random_state=random_state,
             )
             model_name = model_name or fallback_name
